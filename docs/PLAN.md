@@ -57,9 +57,16 @@ The repo already has a working prototype (`server.js` + `public/index.html`): No
 
 ### Scoping
 
-- Each user is assigned **one or more brands** and **one or more locations** (sites/yards).
-- A user can see an enquiry only if it matches **both** one of their brands **and** one of their locations, and, for salespeople, it's assigned to them.
+Sunco has **four locations: Caloundra, Maroochydore, Kingaroy and Hervey Bay**, and each one carries its own mix of brands. So the basic unit is a **franchise**: one brand at one location (e.g. *MG – Caloundra*, *MG – Hervey Bay*).
+
+- Admin sets up which brands are sold at which location (the **franchise list**).
+- Each user is assigned to **specific franchises**, not to brands and locations separately. That stops a Caloundra MG salesperson from automatically seeing Hervey Bay MG enquiries. It also covers someone who sells MG at Caloundra and LDV at Maroochydore.
+- Shortcuts in Admin: "all brands at Kingaroy" (e.g. a site manager) or "Hyundai at every location" (e.g. a brand manager).
+- **Salesperson:** sees only enquiries assigned to them, within their franchises.
+- **Sales Manager:** sees every enquiry in their franchises (e.g. one site, or one brand across sites).
+- **General Manager:** sees all four locations.
 - This is enforced **on the server** for every request and every live update, not just hidden in the UI.
+- On the enquiry form, the **location** defaults to the user's site, and the **brand** dropdown shows only brands sold at that location *and* assigned to the user.
 
 ### Login
 
@@ -145,7 +152,8 @@ All reports respect the user's scope (a salesperson sees their own, a manager se
 - Optional automatic email to managers/GM at close of business.
 
 ### Month-to-date and year-to-date
-- **Enquiries**, **test drives**, **sales**, and **lost**, broken down by brand, salesperson, source and model.
+- **Enquiries**, **test drives**, **sales**, and **lost**, broken down by location, brand, salesperson, source and model.
+- **Location comparison** (GM view): the four sites side by side, and the same brand compared across sites.
 - **Conversion rate** = sold ÷ enquiries (definition agreed with management, see §10). Shown for the month and the year, with the same period last month/year for comparison.
 - **Test-drive rate** and **test-drive → sale rate**.
 - **Lost reasons** breakdown.
@@ -171,7 +179,7 @@ The app is built once and can run in either of these setups. Only configuration 
 | Maintenance | Someone on site restarts or updates it | Mostly hands-off |
 | Risk | PC failure or power outage = downtime | Depends on internet access |
 
-**Recommendation:** develop and pilot locally (option A), and plan production on option B if there's more than one location or managers want access from home. The database layer will support both SQLite (local) and Postgres (cloud) so moving between them is a configuration change.
+**Recommendation: option B (Google Cloud).** With four sites spread from Caloundra to Hervey Bay, one central server that all of them reach over HTTPS is simpler and more reliable than a server at one site plus VPN links to the other three. Development and the pilot can still run locally first. The database layer will support both SQLite (local) and Postgres (cloud) so moving between them is a configuration change.
 
 > "Google API" note: Google Sheets/Apps Script could technically be the backend, but it brings back the problems you're trying to escape (no real permissions per row, easy to over-type, slow with many users). Google Cloud hosting + Google sign-in gives you the "Google" convenience without those limits.
 
@@ -185,15 +193,18 @@ The app is built once and can run in either of these setups. Only configuration 
 
 - **Branding:** dealership name, logo upload, primary/accent colours (live preview), optional per-brand colour for badges.
 - **Brands:** add, rename, reorder, deactivate. Each brand has its models (and optional variants).
-- **Locations:** add, rename, deactivate sites/yards.
-- **Users:** add/disable, set role, assign brands and locations, reset password, reassign all of a departing salesperson's open enquiries in one action.
+- **Locations:** add, rename, deactivate sites.
+- **Franchises:** a location × brand grid. Tick which brands are sold at each location. Turning one off hides it from new enquiries and keeps its history.
+- **Users:** add/disable, set role, set home location, assign franchises (with "whole location" / "whole brand" shortcuts), reset password, reassign all of a departing salesperson's open enquiries in one action.
 - **Lists:** sources, lost reasons, status labels (labels only; the pipeline logic stays fixed).
 - **Settings:** follow-up escalation days, stale-enquiry days, daily email send time, time zone.
 - **Audit log:** who changed what, and when.
 
-### Initial brand setup (seeded, all editable later)
-Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars.
-Each will be seeded with its current Australian model line-up for you to check and correct before go-live.
+### Initial setup (seeded, all editable later)
+**Locations:** Caloundra, Maroochydore, Kingaroy, Hervey Bay.
+**Brands:** Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars.
+Each brand will be seeded with its current Australian model line-up for you to check and correct before go-live. Models belong to the brand, so they're shared across all locations that sell it.
+**Franchises (brand × location):** *to be confirmed, see §12 Q1.*
 
 ---
 
@@ -205,11 +216,12 @@ brands         (id, name, colour, sort_order, active)
 models         (id, brand_id, name, sort_order, active)
 variants       (id, model_id, name, active)                -- optional
 users          (id, name, username, email, password_hash, role, active, is_admin)
-user_brands    (user_id, brand_id)
-user_locations (user_id, location_id)
+franchises     (id, location_id, brand_id, active)          -- which brands each site sells
+users          += home_location_id
+user_franchises(user_id, franchise_id)                      -- what each user can see/log
 lookup_values  (id, list_type[source|lost_reason], label, sort_order, active)
 customers      (id, name, phone, email, created_at)        -- enables duplicate detection
-enquiries      (id, customer_id, brand_id, model_id, variant_id, location_id,
+enquiries      (id, customer_id, franchise_id, model_id, variant_id,
                 salesperson_id, source_id, status, lost_reason_id,
                 test_drive, trade_in, finance, next_followup_at,
                 created_at, closed_at, created_by)
@@ -232,7 +244,7 @@ audit_log      (id, user_id, action, entity, entity_id, before, after, created_a
 | **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, push + email digests, manager escalation | Nothing falls through the cracks |
 | **3. Reporting** (~1 week) | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
 | **4. Admin & branding** (~1 week) | Full admin screens (brands, models, users, locations, lists, branding, settings, audit log) | Self-service changes, no developer needed |
-| **5. Migration & pilot** (~1–2 weeks) | Excel import tool (open enquiries + optional history), pilot with one brand team, fixes from feedback | Proven with real users |
+| **5. Migration & pilot** (~1–2 weeks) | Excel import tool (open enquiries + optional history, each brand tab mapped to its franchise), pilot at one location or with one brand team, fixes from feedback | Proven with real users |
 | **6. Go-live** | Hosting setup (local or Google Cloud), backups, training, spreadsheet cut-over date | Whole dealership on the CRM |
 
 Timelines are rough working estimates and depend on answers to §12.
@@ -241,7 +253,7 @@ Timelines are rough working estimates and depend on answers to §12.
 
 ## 12. Questions to answer before building
 
-1. **Locations:** how many sites/yards, and which brands are at which site?
+1. **Locations:** ✅ Caloundra, Maroochydore, Kingaroy, Hervey Bay. **Still needed:** which brands are sold at each site (fill in the grid below), and does Used Cars run at all four?
 2. **People:** roughly how many salespeople and managers? Do any salespeople sell more than one brand? Do managers cover several brands?
 3. **Hosting:** do staff need access from outside the dealership (home, other sites)? Does Sunco use **Google Workspace** (for Google sign-in) or Microsoft 365?
 4. **Devices:** will staff mostly use their phones, desk PCs or showroom tablets?
@@ -252,6 +264,24 @@ Timelines are rough working estimates and depend on answers to §12.
 9. **Other managers' brands:** other managers run other brands at Sunco. Should this be built so they can be added later (recommended), with you only managing your brands for now?
 10. **Brand spelling:** confirm "Chery" (the manufacturer) and "Leapmotor" as display names.
 11. **Data retention:** how long should customer details be kept on Lost enquiries?
+
+---
+
+### Franchise grid to fill in (Q1)
+
+| Brand | Caloundra | Maroochydore | Kingaroy | Hervey Bay |
+|---|---|---|---|---|
+| Hyundai | | | | |
+| Nissan | | | | |
+| GAC | | | | |
+| JMC | | | | |
+| Leapmotor | | | | |
+| Jeep | | | | |
+| Chery | | | | |
+| LDV | | | | |
+| MG | | | | |
+| Used Cars | | | | |
+| *Other brands at the site (not yours, for later)* | | | | |
 
 ---
 
