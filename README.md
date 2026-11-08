@@ -1,4 +1,4 @@
-# Sunco Walk-In CRM
+# Sunco Motors Enquiry Management CRM
 
 Walk-in enquiry tracking for Sunco Motors (Caloundra, Maroochydore, Kingaroy, Hervey Bay), replacing the Excel walk-in workbook.
 See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
@@ -15,6 +15,7 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
   - Tablets show the list and the selected enquiry side by side; desk PCs show a table like the spreadsheet.
   - On each enquiry: tap to call, SMS or email; log a follow-up and set the next date in one step; mark Sold or Lost (with a reason); comments and a full history.
   - Managers can also reassign, re-open, or mark an enquiry as a duplicate/invalid. Nothing is ever deleted.
+- **Approvals:** when a salesperson marks an enquiry Sold or Lost, it waits for a sales manager who covers that brand and site. The manager approves or declines it with a reason, which is kept in the enquiry's history. Until then it stays open and drops out of the overdue lists. Sales managers and the GM close enquiries directly.
 - **Reports** for a day, a month, year to date or any date range:
   - Conversion (enquiries sold ÷ enquiries), cars sold, and test-drive, trade-in and finance rates, each compared with the previous period.
   - Breakdowns by site, brand, salesperson, model, source, lost reason and postcode.

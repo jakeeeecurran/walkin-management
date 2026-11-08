@@ -18,7 +18,7 @@ scheduler.start();
 const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
 
 const server = app.listen(config.port, () => {
-  console.log(`Sunco Walk-In CRM running at http://localhost:${config.port}`);
+  console.log(`Sunco Motors Enquiry Management CRM running at http://localhost:${config.port}`);
   console.log(`Database: ${config.dbPath}`);
   console.log(`Backups:  ${config.backupDir}`);
   if (userCount === 0) {

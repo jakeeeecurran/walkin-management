@@ -235,7 +235,7 @@
       h('h2', null, 'Name and colours'),
       CRM.field('Dealership name', name, { name: 'name' }),
       h('div', { class: 'btn-row' }, CRM.field('Main colour', primary, { name: 'primary_colour' }), CRM.field('Accent colour', accent, { name: 'accent_colour' })),
-      h('p', { class: 'muted small' }, 'Colours preview straight away. Pick a main colour dark enough for white text on top.'),
+      h('p', { class: 'muted small' }, 'Colours preview straight away. Pick a main colour dark enough for white text on top. Sunco Motors: main #D81E05, accent #F7A21B.'),
       h('div', null, h('button', { type: 'submit', class: 'btn-primary' }, 'Save'))
     );
     const logoCard = h(
@@ -264,7 +264,8 @@
             }
           },
         }, 'Upload'),
-        logo ? h('button', { onclick: async () => { await CRM.put('/api/admin/logo', { data_url: '' }); await CRM.applyBranding(); reload(); } }, 'Remove logo') : null
+        logo ? h('button', { onclick: async () => { await CRM.put('/api/admin/logo', { data_url: '' }); await CRM.applyBranding(); reload(); } }, 'Remove logo') : null,
+        logo !== '/sunco-logo.png' ? h('button', { class: 'btn-ghost', onclick: async () => { await CRM.put('/api/admin/logo', { data_url: '/sunco-logo.png' }); await CRM.applyBranding(); reload(); } }, 'Use the Sunco Motors logo') : null
       )
     );
     el.replaceChildren(h('div', { class: 'grid-2' }, form, logoCard));

@@ -1,11 +1,11 @@
-/* Sunco Walk-In CRM. Phone first; sidebar + two-panel from 900px; tables from 1200px. */
+/* Sunco Motors Enquiry Management CRM. Phone first; sidebar + two-panel from 900px; tables from 1200px. */
 :root {
-  --primary: #0b3d91;
+  --primary: #d81e05;
   --primary-ink: #ffffff;
   --primary-text: var(--primary);
   --primary-soft: color-mix(in srgb, var(--primary) 9%, #ffffff);
   --primary-line: color-mix(in srgb, var(--primary) 30%, #ffffff);
-  --accent: #f5a623;
+  --accent: #f7a21b;
   --bg: #f5f6f8;
   --surface: #ffffff;
   --surface-2: #f8fafc;
@@ -92,7 +92,11 @@ a:focus-visible { border-radius: 6px; }
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 1.02rem; color: var(--text); text-decoration: none; min-width: 0; letter-spacing: -0.01em; }
 .brand span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.brand img { height: 34px; max-width: 140px; object-fit: contain; }
+.brand img { height: 44px; width: auto; max-width: 150px; object-fit: contain; }
+.product-name { padding-left: 12px; margin-left: 2px; border-left: 1px solid var(--border-strong); color: var(--text-2); font-weight: 600; font-size: 0.95rem; white-space: nowrap; }
+@media (max-width: 520px) { .product-name { display: none; } }
+.auth-logo { display: block; height: 72px; width: auto; max-width: 220px; margin: 0 0 6px -4px; }
+.auth-product { margin: 0 0 18px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .brand-mark { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--primary); color: var(--primary-ink); font-weight: 800; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .topbar-new { display: none; color: var(--primary-ink); background: var(--primary); padding: 9px 16px; border-radius: 999px; font-weight: 650; font-size: 0.92rem; text-decoration: none; box-shadow: var(--shadow-sm); }
@@ -260,7 +264,7 @@ details summary { cursor: pointer; font-weight: 600; color: var(--primary-text);
 .stat.alert .ico { background: var(--danger-soft); color: var(--danger); }
 .stat.alert b { color: var(--danger); }
 .stat.warn .ico { background: var(--warning-soft); color: var(--warning); }
-.new-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; border-radius: var(--radius); text-decoration: none; color: var(--primary-ink); background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #000)); box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 28%, transparent); }
+.new-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; border-radius: var(--radius); text-decoration: none; color: var(--primary-ink); background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, var(--accent)) 100%); box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 28%, transparent); }
 .new-cta b { display: block; font-size: 1.2rem; letter-spacing: -0.01em; }
 .new-cta span { opacity: 0.85; font-size: 0.9rem; }
 .new-cta .plus { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: rgba(255, 255, 255, 0.18); font-size: 1.8rem; font-weight: 400; flex: none; }
@@ -356,7 +360,7 @@ table.data td a { font-weight: 650; text-decoration: none; }
 .kpi .value { font-size: 1.85rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .kpi .value small { font-size: 0.95rem; color: var(--muted); font-weight: 650; letter-spacing: 0; }
 .kpi .delta { font-size: 0.78rem; color: var(--muted); }
-.kpi.hero { background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 72%, #000)); border-color: transparent; color: var(--primary-ink); grid-column: span 2; box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 25%, transparent); }
+.kpi.hero { background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 70%, var(--accent)) 100%); border-color: transparent; color: var(--primary-ink); grid-column: span 2; box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 25%, transparent); }
 .kpi.hero .value { font-size: 2.6rem; }
 .kpi.hero .label, .kpi.hero .delta, .kpi.hero .value small { color: inherit; opacity: 0.88; }
 @media (min-width: 1200px) { .kpi.hero { grid-row: span 2; align-content: center; } }
@@ -549,3 +553,16 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 @media (max-width: 420px) { .primary-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px; } }
 .primary-actions, .primary-actions:is(*) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px; }
 .primary-actions .btn-log { grid-column: 1 / -1; }
+
+/* ---------- Approvals ---------- */
+.badge-pending { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: color-mix(in srgb, var(--accent) 45%, #5a3200); }
+.approval { margin: 0 0 12px; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.approval-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.approval-head svg { width: 18px; height: 18px; color: color-mix(in srgb, var(--accent) 45%, #5a3200); flex: none; }
+.approval p { margin: 0 0 10px; color: var(--text-2); font-size: 0.92rem; }
+.approval .approval-note { font-style: italic; }
+.approval .btn-row { gap: 8px; }
+.approval .btn-row button { flex: 1 1 140px; }
+.primary-actions.solo { grid-template-columns: minmax(0, 1fr) 48px; }
+.primary-actions.solo .btn-log { grid-column: auto; }
+.approvals-card .card { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }

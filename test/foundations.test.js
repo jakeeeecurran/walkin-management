@@ -206,21 +206,58 @@ describe('permissions by brand and site', () => {
     assert.equal(badPostcode.body.field, 'postcode');
   });
 
-  test('lost needs a reason; sold and lost close the enquiry; only managers can re-open', async () => {
+  test("a salesperson's Sold or Lost waits for their sales manager to approve or decline, with a reason", async () => {
     const created = (await alice.post('/api/enquiries', newEnquiry({ customer_name: 'Outcome Test', phone: '0498765432' }))).body.enquiry;
     const noReason = await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'lost' });
     assert.equal(noReason.body.field, 'lost_reason_id');
-    const lost = await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'lost', lost_reason_id: t.ids.lookup('lost_reason', 'Price') });
-    assert.equal(lost.status, 200);
-    assert.equal(lost.body.enquiry.lost_reason, 'Price');
-    assert.equal(lost.body.enquiry.next_followup_at, null);
-    assert.equal((await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'sold' })).status, 403);
-    const sold = await calManager.patch(`/api/enquiries/${created.id}`, { outcome: 'sold' });
-    assert.equal(sold.status, 200);
-    assert.ok(sold.body.enquiry.sold_at);
+
+    // Lost request: stays open, marked pending, drops out of the overdue/due lists.
+    const req = await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'lost', lost_reason_id: t.ids.lookup('lost_reason', 'Price'), comment: 'Found it cheaper elsewhere' });
+    assert.equal(req.status, 200, JSON.stringify(req.body));
+    assert.equal(req.body.enquiry.outcome, 'open');
+    assert.equal(req.body.enquiry.pending_outcome, 'lost');
+    assert.equal(req.body.enquiry.pending_lost_reason, 'Price');
+    assert.equal(req.body.enquiry.pending_by_name, 'Alice');
+    assert.equal(req.body.enquiry.can_approve, false);
+    assert.ok((await calManager.get('/api/enquiries?pending=1')).body.items.some((e) => e.id === created.id));
+
+    // Only a manager covering this brand and site can decide, and a reason is required.
+    assert.equal((await alice.post(`/api/enquiries/${created.id}/approval`, { decision: 'approve', reason: 'ok' })).status, 403);
+    assert.equal((await hbManager.post(`/api/enquiries/${created.id}/approval`, { decision: 'approve', reason: 'ok' })).status, 404);
+    const noWhy = await calManager.post(`/api/enquiries/${created.id}/approval`, { decision: 'decline' });
+    assert.equal(noWhy.body.field, 'reason');
+
+    const declined = await calManager.post(`/api/enquiries/${created.id}/approval`, { decision: 'decline', reason: 'Call them back with the new offer first' });
+    assert.equal(declined.status, 200);
+    assert.equal(declined.body.enquiry.outcome, 'open');
+    assert.equal(declined.body.enquiry.pending_outcome, null);
+
+    // Sold request, then approved: the sale date is when the salesperson recorded it.
+    const soldReq = await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'sold' });
+    assert.equal(soldReq.body.enquiry.pending_outcome, 'sold');
+    const approved = await calManager.post(`/api/enquiries/${created.id}/approval`, { decision: 'approve', reason: 'Deposit received' });
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
+    assert.equal(approved.body.enquiry.outcome, 'sold');
+    assert.equal(approved.body.enquiry.sold_date, soldReq.body.enquiry.pending_date);
+    const history = (await alice.get(`/api/enquiries/${created.id}`)).body.activities.map((a) => a.type);
+    assert.ok(history.includes('approval_requested') && history.includes('declined') && history.includes('approved'));
+
+    // Once closed, only a manager can change it; re-opening needs a follow-up date.
+    assert.equal((await alice.patch(`/api/enquiries/${created.id}`, { outcome: 'lost', lost_reason_id: t.ids.lookup('lost_reason', 'Price') })).status, 403);
     const reopened = await calManager.patch(`/api/enquiries/${created.id}`, { outcome: 'open' });
     assert.equal(reopened.status, 400);
     assert.equal(reopened.body.field, 'next_followup_at');
+  });
+
+  test('managers close enquiries directly; requests can be withdrawn', async () => {
+    const e = (await alice.post('/api/enquiries', newEnquiry({ customer_name: 'Direct Close', phone: '0498765433' }))).body.enquiry;
+    const direct = await calManager.patch(`/api/enquiries/${e.id}`, { outcome: 'sold' });
+    assert.equal(direct.body.enquiry.outcome, 'sold');
+    const e2 = (await alice.post('/api/enquiries', newEnquiry({ customer_name: 'Withdraw Me', phone: '0498765434', outcome: 'sold' }))).body.enquiry;
+    assert.equal(e2.outcome, 'open');
+    assert.equal(e2.pending_outcome, 'sold');
+    const w = await alice.post(`/api/enquiries/${e2.id}/withdraw`, {});
+    assert.equal(w.body.enquiry.pending_outcome, null);
   });
 
   test('only managers can back-date the date of entry', async () => {

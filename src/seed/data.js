@@ -150,9 +150,9 @@ const lostReasons = ['Price', 'Finance declined', 'Bought elsewhere', 'Not ready
 
 const settings = {
   'branding.name': 'Sunco Motors',
-  'branding.primary_colour': '#0B3D91',
-  'branding.accent_colour': '#F5A623',
-  'branding.logo_url': '',
+  'branding.primary_colour': '#D81E05',
+  'branding.accent_colour': '#F7A21B',
+  'branding.logo_url': '/sunco-logo.png',
   'followup.escalation_days': '3',
   'followup.stale_days': '45',
   timezone: 'Australia/Brisbane',

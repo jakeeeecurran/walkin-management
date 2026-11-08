@@ -7,6 +7,7 @@
   // ---------- Shared bits ----------
   function statusBadge(e) {
     if (e.is_invalid) return h('span', { class: 'badge badge-invalid' }, 'Invalid');
+    if (e.pending_outcome) return h('span', { class: 'badge badge-pending' }, e.pending_outcome === 'sold' ? 'Sold · approval' : 'Lost · approval');
     if (e.outcome === 'sold') return h('span', { class: 'badge badge-sold' }, 'Sold');
     if (e.outcome === 'lost') return h('span', { class: 'badge badge-lost' }, 'Lost');
     const t = CRM.today();
@@ -39,10 +40,12 @@
   CRM.route(/^\/today$/, async (main) => {
     const me = CRM.state.me;
     const today = CRM.today();
-    const [due, mine] = await Promise.all([
+    const [due, mine, pending] = await Promise.all([
       CRM.get(`/api/enquiries${CRM.qs({ due: 'today', sort: 'followup', limit: 200 })}`),
       CRM.get(`/api/enquiries${CRM.qs({ entry_date: today, limit: 6 })}`),
+      CRM.get(`/api/enquiries${CRM.qs({ pending: '1', sort: 'oldest', limit: 6 })}`),
     ]);
+    const toApprove = pending.items.filter((e) => e.can_approve);
     const overdue = due.items.filter((e) => e.next_followup_at < today);
     const dueToday = due.items.filter((e) => e.next_followup_at === today);
     const SHOW = 5;
@@ -70,6 +73,7 @@
           h('a', { class: 'stat', href: '#/enquiries?view=today' }, h('div', { class: 'ico' }, CRM.icon('walk')), h('b', null, mine.total), h('span', null, 'Walk-ins today'))
         )
       ),
+      toApprove.length ? h('div', { class: 'approvals-card' }, section(CRM.isManager() ? 'Waiting for your approval' : 'Awaiting approval', toApprove, pending.total, 'pending', '', '')) : null,
       h(
         'div',
         { class: 'grid-2' },
@@ -85,6 +89,7 @@
     { value: 'open', label: 'Open', hint: 'Everything still in progress', params: { outcome: 'open', sort: 'followup' } },
     { value: 'overdue', label: 'Overdue', hint: 'Follow-up date has passed', params: { overdue: '1', sort: 'followup' } },
     { value: 'due', label: 'Due today', hint: 'Overdue and due today', params: { due: 'today', sort: 'followup' } },
+    { value: 'pending', label: 'Awaiting approval', hint: 'Sold or lost, waiting for a sales manager', params: { pending: '1', sort: 'oldest' } },
     { value: 'today', label: 'Added today', params: () => ({ entry_date: CRM.today() }) },
     { value: 'month', label: 'This month', params: () => ({ month: CRM.today().slice(0, 7) }) },
     { value: 'sold', label: 'Sold', params: { outcome: 'sold' } },
@@ -130,7 +135,11 @@
     }
 
     function draw() {
-      countEl.textContent = `${listState.total} ${viewDef().value === 'all' ? '' : viewDef().label.toLowerCase() + ' '}enquir${listState.total === 1 ? 'y' : 'ies'}`.replace('  ', ' ');
+      const n = listState.total;
+      const noun = `enquir${n === 1 ? 'y' : 'ies'}`;
+      const before = { open: 'open', overdue: 'overdue', sold: 'sold', lost: 'lost' }[viewDef().value];
+      const after = { due: 'due today', pending: 'awaiting approval', today: 'added today', month: 'this month' }[viewDef().value];
+      countEl.textContent = [n, before, noun, after].filter(Boolean).join(' ');
       if (!listState.items.length) {
         results.replaceChildren(h('div', { class: 'card' }, CRM.empty('Nothing here', listState.q || activeFilters().length ? 'Try a different search or clear the filters.' : 'No enquiries in this view.', 'search')));
         return;
@@ -285,7 +294,26 @@
 
     const panel = h('div');
     let actions;
-    if (e.can_edit && e.outcome === 'open' && !e.is_invalid) {
+    let approval = null;
+    if (e.pending_outcome) {
+      // Waiting for the sales manager: show the request, with Approve/Decline for whoever can decide.
+      const sold = e.pending_outcome === 'sold';
+      approval = h(
+        'div',
+        { class: ['approval', sold ? 'sold' : 'lost'] },
+        h('div', { class: 'approval-head' }, CRM.icon(sold ? 'check' : 'ban'), h('b', null, sold ? 'Marked as sold' : `Marked as lost: ${e.pending_lost_reason}`)),
+        h('p', null, `${e.pending_by_name} on ${CRM.fmtDate(e.pending_date, { weekday: true })}. ${e.can_approve ? 'Approve or decline it, with a reason.' : 'Waiting for a sales manager to approve it.'}`),
+        e.pending_note ? h('p', { class: 'approval-note' }, `“${e.pending_note}”`) : null,
+        h(
+          'div',
+          { class: 'btn-row' },
+          e.can_approve ? h('button', { class: sold ? 'btn-good' : 'btn-primary', onclick: () => decide(e, ref, 'approve', refresh) }, sold ? 'Approve sale' : 'Approve lost') : null,
+          e.can_approve ? h('button', { onclick: () => decide(e, ref, 'decline', refresh) }, 'Decline') : null,
+          !e.can_approve && e.can_edit ? h('button', { class: 'btn-ghost', onclick: () => withdraw(e, refresh) }, 'Withdraw request') : null
+        )
+      );
+    }
+    if (e.can_edit && e.outcome === 'open' && !e.is_invalid && !e.pending_outcome) {
       actions = h(
         'div',
         { class: 'primary-actions' },
@@ -294,6 +322,8 @@
         h('button', { class: 'btn-danger', onclick: () => markLost(e, ref, refresh) }, 'Lost'),
         moreBtn
       );
+    } else if (e.can_edit && e.pending_outcome && !e.is_invalid) {
+      actions = h('div', { class: 'primary-actions solo' }, h('button', { class: 'btn-log', onclick: () => followupPanel(panel, e, refresh) }, 'Log follow-up'), moreBtn);
     } else if (moreBtn) {
       actions = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } }, moreBtn);
     }
@@ -301,7 +331,7 @@
     // Key facts first; the rest behind "More details".
     const fact = (label, value) => (value === null || value === undefined || value === '' ? null : h('div', null, h('dt', null, label), h('dd', null, value)));
     const followCallout =
-      e.outcome === 'open' && !e.is_invalid
+      e.outcome === 'open' && !e.is_invalid && !e.pending_outcome
         ? h('div', { class: ['next-up', e.overdue && 'overdue', e.next_followup_at === CRM.today() && 'today'] }, CRM.icon('clock'), h('div', null, h('span', null, 'Next follow-up'), h('b', null, `${CRM.relDay(e.next_followup_at)} · ${CRM.fmtDate(e.next_followup_at, { weekday: true })}`)))
         : null;
     const flag = (on, label) => h('span', { class: ['flag', on && 'on'] }, on ? CRM.icon('check') : null, label);
@@ -369,10 +399,10 @@
           'div',
           { class: 'detail-head' },
           CRM.avatar(e.customer_name, e.brand_colour),
-          h('div', { style: { minWidth: 0, flex: 1 } }, h('h1', null, e.customer_name), h('div', { class: 'muted' }, `${vehicleLine(e)} · ${e.location}`)),
-          statusBadge(e)
+          h('div', { style: { minWidth: 0, flex: 1 } }, h('h1', null, e.customer_name), h('div', { class: 'muted' }, `${vehicleLine(e)} · ${e.location}`), h('div', { class: 'badges' }, statusBadge(e)))
         ),
         contact,
+        approval,
         actions,
         panel,
         followCallout,
@@ -442,10 +472,83 @@
   }
 
   async function markSold(e, refresh) {
-    if (!(await CRM.confirm('Mark as sold?', `Record ${e.customer_name} as sold today.`, 'Mark sold', 'btn-good'))) return;
+    const needsApproval = !CRM.isManager();
+    const note = h('input', { placeholder: 'Deposit taken, delivery date… (optional)', maxLength: 500 });
+    CRM.dialog({
+      title: 'Mark as sold?',
+      body: h(
+        'div',
+        { class: 'stack' },
+        h('p', { class: 'muted', style: { margin: 0 } }, needsApproval ? `Your sales manager will be asked to approve ${e.customer_name} as sold.` : `Record ${e.customer_name} as sold today.`),
+        needsApproval ? note : null
+      ),
+      actions: [
+        { label: 'Cancel', class: 'btn-ghost' },
+        {
+          label: needsApproval ? 'Send for approval' : 'Mark sold',
+          class: 'btn-good',
+          onClick: async () => {
+            await CRM.patch(`/api/enquiries/${e.id}`, { outcome: 'sold', comment: needsApproval ? note.value : undefined });
+            CRM.toast(needsApproval ? 'Sent to your sales manager for approval' : 'Marked as sold 🎉');
+            await refresh();
+          },
+        },
+      ],
+    });
+  }
+
+  // Sales manager: approve or decline a Sold/Lost, with a reason.
+  function decide(e, ref, decision, refresh) {
+    const sold = e.pending_outcome === 'sold';
+    const reason = h('textarea', { rows: 3, maxLength: 500, placeholder: decision === 'approve' ? (sold ? 'e.g. Deposit received, delivery booked for Friday' : 'e.g. Confirmed bought elsewhere') : 'e.g. Follow up with the revised trade-in offer first' });
+    let lostReason = e.pending_lost_reason_id;
+    const chips =
+      decision === 'approve' && !sold
+        ? h(
+            'div',
+            { class: 'chips' },
+            ref.lost_reasons.filter((r) => r.active).map((r) =>
+              h('button', { type: 'button', class: 'chip small', 'aria-pressed': String(r.id === lostReason), onclick: (ev) => { lostReason = r.id; ev.currentTarget.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === ev.currentTarget))); } }, r.label)
+            )
+          )
+        : null;
+    const body = h(
+      'div',
+      { class: 'stack' },
+      h('p', { class: 'muted', style: { margin: 0 } }, decision === 'approve' ? `${e.customer_name} will be recorded as ${sold ? 'sold' : 'lost'}.` : `${e.customer_name} stays open with ${e.salesperson}. They will see your reason.`),
+      chips ? h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Lost reason'), chips) : null,
+      h('div', { class: 'field', dataset: { field: 'reason' } }, h('span', { class: 'field-label req' }, decision === 'approve' ? 'Why are you approving it?' : 'Why are you declining it?'), reason)
+    );
+    CRM.dialog({
+      title: decision === 'approve' ? (sold ? 'Approve sale' : 'Approve lost') : 'Decline',
+      body,
+      actions: [
+        { label: 'Cancel', class: 'btn-ghost' },
+        {
+          label: decision === 'approve' ? 'Approve' : 'Decline',
+          class: decision === 'approve' ? 'btn-good' : 'btn-danger',
+          onClick: async () => {
+            try {
+              await CRM.post(`/api/enquiries/${e.id}/approval`, { decision, reason: reason.value, lost_reason_id: lostReason });
+            } catch (err) {
+              if (err.field) {
+                CRM.showError(body, err);
+                return true;
+              }
+              throw err;
+            }
+            CRM.toast(decision === 'approve' ? 'Approved' : 'Declined: it stays open');
+            await refresh();
+          },
+        },
+      ],
+    });
+  }
+
+  async function withdraw(e, refresh) {
     try {
-      await CRM.patch(`/api/enquiries/${e.id}`, { outcome: 'sold' });
-      CRM.toast('Marked as sold 🎉');
+      await CRM.post(`/api/enquiries/${e.id}/withdraw`, {});
+      CRM.toast('Request withdrawn');
       await refresh();
     } catch (err) {
       CRM.fail(err);
@@ -469,7 +572,7 @@
       actions: [
         { label: 'Cancel', class: 'btn-ghost' },
         {
-          label: 'Mark lost',
+          label: CRM.isManager() ? 'Mark lost' : 'Send for approval',
           class: 'btn-primary',
           onClick: async () => {
             if (!chosen) {
@@ -477,7 +580,7 @@
               return true;
             }
             await CRM.patch(`/api/enquiries/${e.id}`, { outcome: 'lost', lost_reason_id: chosen, comment: note.value });
-            CRM.toast('Marked as lost');
+            CRM.toast(CRM.isManager() ? 'Marked as lost' : 'Sent to your sales manager for approval');
             await refresh();
           },
         },
@@ -678,7 +781,8 @@
       const reasons = ref.lost_reasons.filter((r) => r.active || r.id === existing?.lost_reason_id);
       outcomeField.replaceChildren(
         h('div', { class: 'field', dataset: { field: 'outcome' } }, h('span', { class: 'field-label' }, 'Outcome'), seg),
-        s.outcome === 'open' ? h('div', { class: 'field', dataset: { field: 'next_followup_at' } }, h('span', { class: 'field-label req' }, 'Next follow-up'), quickDates(followup)) : null,
+        s.outcome !== 'open' && !CRM.isManager() ? h('p', { class: 'hint', style: { margin: 0 } }, 'Your sales manager will be asked to approve this. Until then it stays open.') : null,
+        s.outcome === 'open' || !CRM.isManager() ? h('div', { class: 'field', dataset: { field: 'next_followup_at' } }, h('span', { class: 'field-label req' }, 'Next follow-up'), quickDates(followup)) : null,
         s.outcome === 'lost'
           ? h(
               'div',
@@ -752,7 +856,7 @@
       } else {
         body.model_id = s.model_id ? Number(s.model_id) : null;
       }
-      if (s.outcome === 'open') body.next_followup_at = followup.value;
+      if (s.outcome === 'open' || !CRM.isManager()) body.next_followup_at = followup.value;
       if (s.outcome === 'lost') body.lost_reason_id = s.lost_reason_id;
       if (CRM.isManager()) {
         body.salesperson_id = Number(salespersonSel.value) || undefined;
@@ -760,7 +864,7 @@
       }
       try {
         const res = existing ? await CRM.patch(`/api/enquiries/${existing.id}`, body) : await CRM.post('/api/enquiries', body);
-        CRM.toast(existing ? 'Saved' : `Walk-in saved`);
+        CRM.toast(res.enquiry.pending_outcome && (!existing || !existing.pending_outcome) ? 'Saved and sent to your sales manager for approval' : existing ? 'Saved' : 'Walk-in saved');
         await CRM.loadRef(true);
         CRM.go(existing ? `#/enquiries/${res.enquiry.id}` : '#/today');
       } catch (err) {

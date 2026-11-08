@@ -42,7 +42,7 @@ function createMailer({ db, transportFactory = nodemailer.createTransport }) {
   function wrap(cfg, title, bodyHtml) {
     return `<!doctype html><html><body style="margin:0;background:#f4f6f9;font-family:Segoe UI,Arial,sans-serif;color:#1a1f2b">
 <div style="max-width:640px;margin:0 auto;padding:16px">
-<div style="background:${esc(cfg.colour)};color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:700">${esc(cfg.dealer)} Walk-In CRM</div>
+<div style="background:${esc(cfg.colour)};color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:700">${esc(cfg.dealer)} Enquiry Management CRM</div>
 <div style="background:#fff;padding:18px;border-radius:0 0 10px 10px;border:1px solid #d9dee7;border-top:0">
 <h2 style="margin:0 0 12px;font-size:18px">${esc(title)}</h2>${bodyHtml}
 ${cfg.appUrl ? `<p style="margin-top:20px"><a href="${esc(cfg.appUrl)}" style="background:${esc(cfg.colour)};color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;display:inline-block">Open the CRM</a></p>` : ''}
@@ -76,7 +76,7 @@ ${rows
     const f = scope.enquiryFilter(db, user);
     if (user.role === 'salesperson') {
       const rows = db
-        .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.salesperson_id = ? AND e.next_followup_at <= ? ORDER BY e.next_followup_at`)
+        .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.salesperson_id = ? AND e.next_followup_at <= ? ORDER BY e.next_followup_at`)
         .all(...f.params, user.id, today);
       if (!rows.length) return null;
       const overdue = rows.filter((r) => r.next_followup_at < today);
@@ -90,13 +90,21 @@ ${rows
     // Managers and GM: team overdue follow-ups (escalated ones highlighted) and yesterday's walk-ins.
     const s = summary(db, user, { period: 'day', date: addDays(today, -1) });
     const overdue = db
-      .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.next_followup_at < ? ORDER BY e.next_followup_at LIMIT 100`)
+      .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at < ? ORDER BY e.next_followup_at LIMIT 100`)
       .all(...f.params, today);
+    const approvals = db
+      .prepare(`SELECT e.id, e.customer_name, e.pending_outcome, b.name AS brand, sp.name AS salesperson_name FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id JOIN brands b ON b.id = fr.brand_id JOIN users sp ON sp.id = e.salesperson_id WHERE ${f.sql} AND e.pending_outcome IS NOT NULL ORDER BY e.pending_at`)
+      .all(...f.params);
     const escalationDays = s.followups.escalation_days;
     const escalated = overdue.filter((r) => r.next_followup_at <= addDays(today, -escalationDays));
     const title = `Morning summary: ${s.totals.enquiries} walk-in${s.totals.enquiries === 1 ? '' : 's'} yesterday, ${overdue.length} overdue follow-up${overdue.length === 1 ? '' : 's'}`;
     const brandRows = s.by_location_brand.map((g) => `<tr><td style="padding:4px">${esc(g.label)}</td><td style="padding:4px;text-align:right">${g.enquiries}</td><td style="padding:4px;text-align:right">${g.test_drives}</td><td style="padding:4px;text-align:right">${g.sold}</td></tr>`).join('');
-    const html = `<h3 style="font-size:15px">Yesterday (${esc(s.period.from)})</h3>
+    const approvalHtml = approvals.length
+      ? `<h3 style="font-size:15px">Waiting for your approval (${approvals.length})</h3><ul style="font-size:14px;padding-left:18px">${approvals
+          .map((a) => `<li>${cfg.appUrl ? `<a href="${esc(cfg.appUrl)}">${esc(a.customer_name)}</a>` : esc(a.customer_name)}: ${a.pending_outcome === 'sold' ? 'sold' : 'lost'} (${esc(a.brand)}, ${esc(a.salesperson_name)})</li>`)
+          .join('')}</ul>`
+      : '';
+    const html = `${approvalHtml}<h3 style="font-size:15px">Yesterday (${esc(s.period.from)})</h3>
 ${s.totals.enquiries ? `<table style="border-collapse:collapse;font-size:14px"><tr style="color:#5d6677;text-align:left"><th style="padding:4px">Brand</th><th style="padding:4px">Walk-ins</th><th style="padding:4px">Test drives</th><th style="padding:4px">Sold</th></tr>${brandRows}</table>` : '<p>No walk-ins recorded.</p>'}
 ${escalated.length ? `<h3 style="color:#b42318;font-size:15px">Overdue by ${escalationDays}+ days (${escalated.length})</h3>${enquiryTable(cfg, escalated)}` : ''}
 <h3 style="font-size:15px">All overdue follow-ups (${overdue.length})</h3>${enquiryTable(cfg, overdue.filter((r) => !escalated.includes(r)))}`;
@@ -189,7 +197,7 @@ ${rows ? `<table style="border-collapse:collapse;font-size:14px"><tr style="colo
       return { sent: 0, skipped: 'too large to email' };
     }
     const title = `Sunco CRM backup ${day}`;
-    const html = `<p>Attached is the daily backup of the Walk-In CRM (${counts.enquiries} enquiries, ${counts.users} users, ${sizeMb} MB). <b>Keep this email.</b></p>
+    const html = `<p>Attached is the daily backup of the Sunco Motors Enquiry Management CRM (${counts.enquiries} enquiries, ${counts.users} users, ${sizeMb} MB). <b>Keep this email.</b></p>
 <p><b>If the CRM ever breaks or the server is lost:</b></p>
 <ol>
 <li>Get the CRM running again (same server once fixed, or a new one): install it and create an admin login.</li>
@@ -197,7 +205,7 @@ ${rows ? `<table style="border-collapse:collapse;font-size:14px"><tr style="colo
 <li>Or, on the server: <code>npm run restore -- ${esc(file.filename)}</code></li>
 </ol>
 <p>The file is encrypted. It can only be opened with the backup passphrase set in Admin → Email &amp; settings. Keep that passphrase written down somewhere safe, away from the server.</p>`;
-    const text = `Attached is the daily backup of the Walk-In CRM. To restore: Admin → Backups → Restore from a backup file, choose ${file.filename} and enter the backup passphrase. Or run: npm run restore -- ${file.filename}`;
+    const text = `Attached is the daily backup of the Sunco Motors Enquiry Management CRM. To restore: Admin → Backups → Restore from a backup file, choose ${file.filename} and enter the backup passphrase. Or run: npm run restore -- ${file.filename}`;
     try {
       await send(to.join(', '), title, wrap(cfg, title, html), text, cfg, [{ filename: file.filename, content: file.content, contentType: 'application/octet-stream' }]);
       recordQuiet('backup', null, day, 'sent', `${name} to ${to.length} recipient(s)`);
@@ -211,7 +219,7 @@ ${rows ? `<table style="border-collapse:collapse;font-size:14px"><tr style="colo
   async function sendTest(to) {
     const cfg = config();
     if (!cfg.host || !cfg.from) throw Object.assign(new Error('Enter the SMTP server and From address first'), { status: 400 });
-    await send(to, 'Test email from the Walk-In CRM', wrap(cfg, 'Email is working', '<p>This is a test email. Reminders will be sent from this address.</p>'), 'Email is working.', cfg);
+    await send(to, 'Test email from the Enquiry Management CRM', wrap(cfg, 'Email is working', '<p>This is a test email. Reminders will be sent from this address.</p>'), 'Email is working.', cfg);
   }
 
   return { config, sendDigests, sendAdminAlert, sendTest, sendBackup, morningEmail, endOfDayEmail };

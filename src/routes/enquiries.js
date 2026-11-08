@@ -23,7 +23,8 @@ const SELECT = `
     um.name AS used_make,
     COALESCE(ulm.name, uxm.name, e.used_model_other) AS used_model,
     sp.name AS salesperson, cb.name AS created_by_name,
-    src.label AS source, lr.label AS lost_reason
+    src.label AS source, lr.label AS lost_reason,
+    plr.label AS pending_lost_reason, pb.name AS pending_by_name
   FROM enquiries e
   JOIN franchises f ON f.id = e.franchise_id
   JOIN locations l ON l.id = f.location_id
@@ -35,7 +36,9 @@ const SELECT = `
   JOIN users sp ON sp.id = e.salesperson_id
   JOIN users cb ON cb.id = e.created_by
   LEFT JOIN lookup_values src ON src.id = e.source_id
-  LEFT JOIN lookup_values lr ON lr.id = e.lost_reason_id`;
+  LEFT JOIN lookup_values lr ON lr.id = e.lost_reason_id
+  LEFT JOIN lookup_values plr ON plr.id = e.pending_lost_reason_id
+  LEFT JOIN users pb ON pb.id = e.pending_by`;
 
 module.exports = function enquiryRoutes({ db, timeZone }) {
   const router = express.Router();
@@ -53,6 +56,7 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       : row.model;
     out.overdue = row.outcome === 'open' && row.next_followup_at && row.next_followup_at < today();
     out.can_edit = scope.canEditEnquiry(db, user, row);
+    out.can_approve = !!row.pending_outcome && canApprove(user, row);
     for (const k of ['test_drive', 'trade_in', 'finance', 'is_invalid', 'brand_is_used']) out[k] = row[k] === 1;
     return out;
   }
@@ -178,7 +182,19 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     for (const k of ['test_drive', 'trade_in', 'finance']) rec[k] = v.bool(pick(k, existing?.[k] ?? 0));
 
     // --- Outcome ---
-    const outcome = v.oneOf(pick('outcome', existing?.outcome ?? 'open'), 'outcome', OUTCOMES);
+    let outcome = v.oneOf(pick('outcome', existing?.outcome ?? 'open'), 'outcome', OUTCOMES);
+    // A salesperson's Sold or Lost goes to their sales manager for approval; until then it stays open.
+    if (!manager && outcome !== 'open' && (isNew || existing.outcome === 'open')) {
+      const request = { outcome, lost_reason_id: null };
+      if (outcome === 'lost') {
+        const reasonId = v.id(pick('lost_reason_id', null), 'lost_reason_id', { required: true });
+        const r = db.prepare("SELECT * FROM lookup_values WHERE id = ? AND list_type = 'lost_reason' AND active = 1").get(reasonId);
+        if (!r) throw new v.ValidationError('lost_reason_id', 'Choose a lost reason from the list');
+        request.lost_reason_id = reasonId;
+      }
+      Object.defineProperty(rec, 'approvalRequest', { value: request, enumerable: false });
+      outcome = 'open';
+    }
     const outcomeChanged = !isNew && outcome !== existing.outcome;
     if (outcomeChanged && existing.outcome !== 'open' && !manager) {
       throw forbidden('Only a manager can re-open or change a sold or lost enquiry');
@@ -263,6 +279,25 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     }
   }
 
+  // The sales manager(s) covering this brand at this site, and the GM/admins, can approve.
+  function canApprove(user, row) {
+    return scope.isManager(user) && scope.hasFranchise(db, user, row.franchise_id);
+  }
+
+  function saveRequest(enquiryId, user, request, note) {
+    db.prepare(
+      'UPDATE enquiries SET pending_outcome = ?, pending_lost_reason_id = ?, pending_note = ?, pending_by = ?, pending_at = ?, pending_date = ? WHERE id = ?'
+    ).run(request.outcome, request.lost_reason_id, note || null, user.id, nowIso(), today(), enquiryId);
+    const reason = request.lost_reason_id ? db.prepare('SELECT label FROM lookup_values WHERE id = ?').get(request.lost_reason_id).label : null;
+    const what = request.outcome === 'sold' ? 'Marked as sold' : `Marked as lost (${reason})`;
+    addActivity(enquiryId, user.id, 'approval_requested', `${what}. Waiting for sales manager approval.${note ? ` Note: ${note}` : ''}`);
+    audit(db, { userId: user.id, action: 'request_approval', entity: 'enquiry', entityId: enquiryId, after: request });
+  }
+
+  function clearRequest(enquiryId) {
+    db.prepare('UPDATE enquiries SET pending_outcome = NULL, pending_lost_reason_id = NULL, pending_note = NULL, pending_by = NULL, pending_at = NULL, pending_date = NULL WHERE id = ?').run(enquiryId);
+  }
+
   function describeChanges(before, after) {
     const labels = {
       franchise_id: 'site/brand', salesperson_id: 'salesperson', customer_name: 'name', postcode: 'postcode', phone: 'phone',
@@ -318,12 +353,13 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       where.push('e.salesperson_id = ?');
       params.push(v.id(q.salesperson_id, 'salesperson_id'));
     }
+    if (q.pending === '1') where.push('e.pending_outcome IS NOT NULL');
     if (q.overdue === '1') {
-      where.push("e.outcome = 'open' AND e.next_followup_at < ?");
+      where.push("e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at < ?");
       params.push(today());
     }
     if (q.due === 'today') {
-      where.push("e.outcome = 'open' AND e.next_followup_at <= ?");
+      where.push("e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at <= ?");
       params.push(today());
     }
     if (q.q) {
@@ -413,6 +449,7 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       );
       addActivity(newId, user.id, 'created', null);
       if (comment) addActivity(newId, user.id, 'comment', comment);
+      if (rec.approvalRequest) saveRequest(newId, user, rec.approvalRequest, null);
       audit(db, { userId: user.id, action: 'create', entity: 'enquiry', entityId: newId, after: rec });
       return newId;
     });
@@ -438,14 +475,16 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       if (before.outcome !== rec.outcome) {
         const cap = (s) => s[0].toUpperCase() + s.slice(1);
         addActivity(existing.id, user.id, 'status_change', `${cap(before.outcome)} → ${cap(rec.outcome)}`);
+        if (existing.pending_outcome) clearRequest(existing.id); // a manager closing it directly settles any request
       }
+      if (rec.approvalRequest) saveRequest(existing.id, user, rec.approvalRequest, comment);
       if (before.salesperson_id !== rec.salesperson_id) {
         const to = db.prepare('SELECT name FROM users WHERE id = ?').get(rec.salesperson_id).name;
         addActivity(existing.id, user.id, 'reassigned', `${existing.salesperson} → ${to}`);
       }
       const changed = describeChanges(before, rec).filter((c) => c !== 'salesperson');
       if (changed.length) addActivity(existing.id, user.id, 'edited', `Changed ${changed.join(', ')}`);
-      if (comment) addActivity(existing.id, user.id, 'comment', comment);
+      if (comment && !rec.approvalRequest) addActivity(existing.id, user.id, 'comment', comment);
       audit(db, { userId: user.id, action: 'update', entity: 'enquiry', entityId: existing.id, before, after: rec });
     });
     res.json({ enquiry: present(load(existing.id), user) });
@@ -460,6 +499,57 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     addActivity(row.id, req.user.id, type, body);
     db.prepare('UPDATE enquiries SET updated_at = ? WHERE id = ?').run(nowIso(), row.id);
     res.status(201).json({ ok: true });
+  });
+
+  // Sales manager approves or declines a salesperson's Sold/Lost, giving a reason either way.
+  router.post('/:id/approval', (req, res) => {
+    const row = getVisible(req);
+    if (!row.pending_outcome) throw badRequest('There is nothing waiting for approval on this enquiry');
+    if (!canApprove(req.user, row)) throw forbidden('Only the sales manager for this brand and site can approve this');
+    const decision = v.oneOf(req.body?.decision, 'decision', ['approve', 'decline']);
+    const reason = v.multilineText(req.body?.reason, 'reason', { required: true, max: 500 });
+    const what = row.pending_outcome === 'sold' ? 'sale' : 'lost enquiry';
+    transaction(db, () => {
+      if (decision === 'approve') {
+        let lostReasonId = null;
+        if (row.pending_outcome === 'lost') {
+          lostReasonId = v.id(req.body?.lost_reason_id, 'lost_reason_id') || row.pending_lost_reason_id;
+          if (!db.prepare("SELECT 1 FROM lookup_values WHERE id = ? AND list_type = 'lost_reason'").get(lostReasonId)) throw new v.ValidationError('lost_reason_id', 'Choose a lost reason');
+        }
+        // The sale or loss dates from when the salesperson recorded it.
+        db.prepare(
+          `UPDATE enquiries SET outcome = ?, lost_reason_id = ?, sold_at = ?, sold_date = ?, closed_at = ?, next_followup_at = NULL, updated_at = ? WHERE id = ?`
+        ).run(
+          row.pending_outcome,
+          lostReasonId,
+          row.pending_outcome === 'sold' ? row.pending_at : null,
+          row.pending_outcome === 'sold' ? row.pending_date : null,
+          row.pending_at,
+          nowIso(),
+          row.id
+        );
+        addActivity(row.id, req.user.id, 'approved', `Approved ${what}: ${reason}`);
+      } else {
+        const follow = row.next_followup_at && row.next_followup_at >= today() ? row.next_followup_at : today();
+        db.prepare('UPDATE enquiries SET next_followup_at = ?, updated_at = ? WHERE id = ?').run(follow, nowIso(), row.id);
+        addActivity(row.id, req.user.id, 'declined', `Declined ${what}: ${reason}`);
+      }
+      clearRequest(row.id);
+      audit(db, { userId: req.user.id, action: decision === 'approve' ? 'approve' : 'decline', entity: 'enquiry', entityId: row.id, before: { pending_outcome: row.pending_outcome }, after: { reason } });
+    });
+    res.json({ enquiry: present(load(row.id), req.user) });
+  });
+
+  // The salesperson (or a manager) withdraws a Sold/Lost request.
+  router.post('/:id/withdraw', (req, res) => {
+    const row = getVisible(req);
+    if (!row.pending_outcome) throw badRequest('There is nothing waiting for approval on this enquiry');
+    if (!scope.canEditEnquiry(db, req.user, row)) throw forbidden();
+    transaction(db, () => {
+      clearRequest(row.id);
+      addActivity(row.id, req.user.id, 'request_withdrawn', `Withdrew the ${row.pending_outcome === 'sold' ? 'sold' : 'lost'} request`);
+    });
+    res.json({ enquiry: present(load(row.id), req.user) });
   });
 
   // Log a follow-up (call, email, SMS, no answer...) and set the next follow-up date in one step.

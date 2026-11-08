@@ -129,8 +129,9 @@ function summary(db, user, opts) {
   const followups = db
     .prepare(
       `SELECT
-         SUM(CASE WHEN e.outcome = 'open' AND e.next_followup_at < ? THEN 1 ELSE 0 END) AS overdue,
-         SUM(CASE WHEN e.outcome = 'open' AND e.next_followup_at = ? THEN 1 ELSE 0 END) AS due_today
+         SUM(CASE WHEN e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at < ? THEN 1 ELSE 0 END) AS overdue,
+         SUM(CASE WHEN e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at = ? THEN 1 ELSE 0 END) AS due_today,
+         SUM(CASE WHEN e.pending_outcome IS NOT NULL THEN 1 ELSE 0 END) AS awaiting_approval
        FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id WHERE ${f.sql}`
     )
     .get(today, today, ...f.params);
@@ -147,7 +148,7 @@ function summary(db, user, opts) {
   const staleDays = Number(getSetting(db, 'followup.stale_days', '45')) || 45;
   const escalated = db
     .prepare(
-      `${ROWS} WHERE ${f.sql} AND e.outcome = 'open' AND e.next_followup_at <= ? ORDER BY e.next_followup_at LIMIT 50`
+      `${ROWS} WHERE ${f.sql} AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at <= ? ORDER BY e.next_followup_at LIMIT 50`
     )
     .all(...f.params, addDays(today, -escalationDays));
   const stale = db
@@ -169,6 +170,7 @@ function summary(db, user, opts) {
     followups: {
       overdue: followups.overdue || 0,
       due_today: followups.due_today || 0,
+      awaiting_approval: followups.awaiting_approval || 0,
       done: compliance.done || 0,
       on_time: compliance.on_time || 0,
       on_time_rate: pct(compliance.on_time || 0, compliance.done || 0),

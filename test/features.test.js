@@ -61,7 +61,7 @@ describe('reports', () => {
     const a = await enquiry(kim);
     await enquiry(kim);
     await enquiry(kim, { test_drive: true });
-    await kim.patch(`/api/enquiries/${a.id}`, { outcome: 'sold' });
+    await manager.patch(`/api/enquiries/${a.id}`, { outcome: 'sold' });
     const s = (await kim.get(`/api/reports/summary?period=day&date=${today}`)).body;
     assert.equal(s.totals.enquiries, 3);
     assert.equal(s.totals.sold, 1);
@@ -195,13 +195,15 @@ describe('backups', () => {
     const { DatabaseSync } = require('node:sqlite');
     const made = (await gm.post('/api/admin/backups', {})).body.backup;
     const file = path.join(t.backupDir, made.name);
-    // Turn the copy into a "version 2" database by removing migration 3's record.
+    // Turn the copy into a "version 3" database by undoing migration 4.
     const old = new DatabaseSync(file);
-    old.exec("DELETE FROM schema_migrations WHERE version = 3; DELETE FROM settings WHERE key LIKE 'backup.email%'");
+    old.exec('DROP INDEX idx_enquiries_pending');
+    for (const c of ['pending_outcome', 'pending_lost_reason_id', 'pending_note', 'pending_by', 'pending_at', 'pending_date']) old.exec(`ALTER TABLE enquiries DROP COLUMN ${c}`);
+    old.exec('DELETE FROM schema_migrations WHERE version = 4');
     old.close();
     const r = await gm.raw('POST', '/api/admin/backups-upload/restore', fs.readFileSync(file), { 'x-confirm': 'RESTORE' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.equal(t.db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, 3);
+    assert.equal(t.db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, 4);
   });
 
   test('backup files can be downloaded by the GM', async () => {

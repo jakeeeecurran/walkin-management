@@ -17,8 +17,10 @@
       const logo = document.getElementById('brand-logo');
       logo.hidden = !b.logo_url;
       document.getElementById('brand-mark').hidden = !!b.logo_url;
+      document.getElementById('dealer-name').hidden = !!b.logo_url; // the logo already shows the name
+      logo.alt = b.name || 'Sunco Motors';
       if (b.logo_url) logo.src = b.logo_url;
-      document.title = `${b.name || 'Sunco Motors'} Walk-In CRM`;
+      document.title = `${b.name || 'Sunco Motors'} Enquiry Management CRM`;
     } catch {
       /* keep defaults */
     }
@@ -102,6 +104,7 @@
     await CRM.post('/api/auth/logout', {}).catch(() => {});
     CRM.state.me = null;
     CRM.state.ref = null;
+    CRM.location.replace('#/today'); // the next person starts on Today, not the last page viewed
     CRM.showLogin();
   };
 
@@ -142,9 +145,10 @@
         h(
           'section',
           { class: 'card narrow' },
-          b.logo_url ? h('img', { src: b.logo_url, alt: '', style: { maxHeight: '48px', maxWidth: '200px', marginBottom: '14px' } }) : h('div', { class: 'brand-mark' }, (b.name || 'S')[0]),
+          b.logo_url ? h('img', { class: 'auth-logo', src: b.logo_url, alt: b.name || 'Sunco Motors' }) : h('div', { class: 'brand-mark' }, (b.name || 'S')[0]),
+          h('p', { class: 'auth-product' }, 'Enquiry Management CRM'),
           h('h1', null, 'Welcome back'),
-          h('p', { class: 'muted', style: { margin: '6px 0 22px' } }, `Sign in to the ${b.name || 'Sunco Motors'} Walk-In CRM`),
+          h('p', { class: 'muted', style: { margin: '6px 0 22px' } }, `Sign in to the ${b.name || 'Sunco Motors'} Enquiry Management CRM`),
           form,
           h('p', { class: 'muted small', style: { margin: '18px 0 0', textAlign: 'center' } }, 'Forgotten your password? Ask your sales manager to reset it.')
         )

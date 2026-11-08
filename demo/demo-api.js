@@ -4,7 +4,7 @@
   const CRM = window.CRM;
   const SEED = window.DEMO_DATA;
   const PASSWORD = 'demo-password-123';
-  const STORE = 'sunco-crm-demo-v1';
+  const STORE = 'sunco-crm-demo-v2';
   const TZ = 'Australia/Brisbane';
 
   // ---------- Dates ----------
@@ -222,6 +222,10 @@
       created_by_name: byId(db.users, e.created_by)?.name,
       source: e.source_id ? byId(db.lookup_values, e.source_id)?.label : null,
       lost_reason: e.lost_reason_id ? byId(db.lookup_values, e.lost_reason_id)?.label : null,
+      pending_outcome: e.pending_outcome || null,
+      pending_lost_reason: e.pending_lost_reason_id ? byId(db.lookup_values, e.pending_lost_reason_id)?.label : null,
+      pending_by_name: e.pending_by ? byId(db.users, e.pending_by)?.name : null,
+      can_approve: !!e.pending_outcome && isManager(user) && hasFranchise(user, e.franchise_id),
       phone_display: formatPhone(e.phone),
       vehicle: b.is_used ? [make?.name, usedModel].filter(Boolean).join(' ') || null : model,
       overdue: e.outcome === 'open' && e.next_followup_at && e.next_followup_at < today(),
@@ -319,8 +323,18 @@
     if (src == null && isNew) src = db.lookup_values.find((x) => x.list_type === 'source' && x.active)?.id;
     rec.source_id = src ? Number(src) : null;
     for (const k of ['test_drive', 'trade_in', 'finance']) rec[k] = v.bool(pick(k, existing?.[k] ?? 0));
-    const outcome = pick('outcome', existing?.outcome ?? 'open');
+    let outcome = pick('outcome', existing?.outcome ?? 'open');
     if (!['open', 'sold', 'lost'].includes(outcome)) bad('outcome', 'Outcome must be open, sold or lost');
+    let request = null;
+    if (!manager && outcome !== 'open' && (isNew || existing.outcome === 'open')) {
+      request = { outcome, lost_reason_id: null };
+      if (outcome === 'lost') {
+        const r = Number(pick('lost_reason_id', null));
+        if (!r) bad('lost_reason_id', 'Lost reason is required');
+        request.lost_reason_id = r;
+      }
+      outcome = 'open';
+    }
     if (!isNew && outcome !== existing.outcome && existing.outcome !== 'open' && !manager) fail(403, 'Only a manager can re-open or change a sold or lost enquiry');
     Object.assign(rec, { outcome, lost_reason_id: null, next_followup_at: null, sold_at: null, sold_date: null, closed_at: null });
     if (outcome === 'open') {
@@ -349,8 +363,16 @@
     }
     rec.entry_date = ed;
     rec.entry_month = ed.slice(0, 7);
+    if (request) Object.defineProperty(rec, 'approvalRequest', { value: request, enumerable: false });
     return rec;
   }
+
+  function saveRequest(e, user, request, note) {
+    Object.assign(e, { pending_outcome: request.outcome, pending_lost_reason_id: request.lost_reason_id, pending_note: note || null, pending_by: user.id, pending_at: nowIso(), pending_date: today() });
+    const reason = request.lost_reason_id ? byId(db.lookup_values, request.lost_reason_id)?.label : null;
+    addActivity(e.id, user.id, 'approval_requested', `${request.outcome === 'sold' ? 'Marked as sold' : `Marked as lost (${reason})`}. Waiting for sales manager approval.${note ? ` Note: ${note}` : ''}`);
+  }
+  const clearRequest = (e) => Object.assign(e, { pending_outcome: null, pending_lost_reason_id: null, pending_note: null, pending_by: null, pending_at: null, pending_date: null });
 
   // ---------- Reports (same maths as the server) ----------
   const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : null);
@@ -430,8 +452,9 @@
       totals: { ...totals(rows), cars_sold: soldBy(range) },
       previous: { ...totals(prevRows), cars_sold: soldBy(range.prev) },
       followups: {
-        overdue: scoped.filter((e) => e.outcome === 'open' && e.next_followup_at < t).length,
-        due_today: scoped.filter((e) => e.outcome === 'open' && e.next_followup_at === t).length,
+        overdue: scoped.filter((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at < t).length,
+        due_today: scoped.filter((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at === t).length,
+        awaiting_approval: scoped.filter((e) => e.pending_outcome).length,
         done: fu.length,
         on_time: fu.filter((a) => a.local_date <= a.followup_due).length,
         on_time_rate: pct(fu.filter((a) => a.local_date <= a.followup_due).length, fu.length),
@@ -446,7 +469,7 @@
       by_source: groupBy(rows, (r) => r.source || 'Not recorded', (r) => r.source || 'Not recorded'),
       by_postcode: groupBy(rows, (r) => r.postcode || '—', (r) => r.postcode || 'Not recorded', 20),
       lost_reasons: groupBy(lostRows, (r) => r.lost_reason || 'Not recorded', (r) => r.lost_reason || 'Not recorded').map((g) => ({ label: g.label, count: g.enquiries, share: pct(g.enquiries, lostRows.length) })),
-      escalated: scoped.filter((e) => e.outcome === 'open' && e.next_followup_at <= addDays(t, -esc)).sort((a, b) => a.next_followup_at.localeCompare(b.next_followup_at)).slice(0, 50).map(slim),
+      escalated: scoped.filter((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at <= addDays(t, -esc)).sort((a, b) => a.next_followup_at.localeCompare(b.next_followup_at)).slice(0, 50).map(slim),
       stale: scoped.filter((e) => e.outcome === 'open' && lastAct(e) <= addDays(t, -stale)).slice(0, 50).map(slim),
       enquiries: period === 'day' ? rows.map(slim) : [],
     };
@@ -545,8 +568,9 @@
     if (q.location_id) f((e) => e.location_id === Number(q.location_id));
     if (q.brand_id) f((e) => e.brand_id === Number(q.brand_id));
     if (q.salesperson_id) f((e) => e.salesperson_id === Number(q.salesperson_id));
-    if (q.overdue === '1') f((e) => e.outcome === 'open' && e.next_followup_at < t);
-    if (q.due === 'today') f((e) => e.outcome === 'open' && e.next_followup_at <= t);
+    if (q.pending === '1') f((e) => !!e.pending_outcome);
+    if (q.overdue === '1') f((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at < t);
+    if (q.due === 'today') f((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at <= t);
     if (q.q) {
       const term = q.q.toLowerCase();
       const digits = q.q.replace(/\D/g, '');
@@ -599,6 +623,7 @@
       db.enquiries.push(e);
       addActivity(e.id, u.id, 'created');
       if (b.comment && String(b.comment).trim()) addActivity(e.id, u.id, 'comment', String(b.comment).trim());
+      if (rec.approvalRequest) saveRequest(e, u, rec.approvalRequest, null);
       audit(u.id, 'create', 'enquiry', e.id, { customer: e.customer_name });
       return { enquiry: present(e, u) };
     } catch (err) {
@@ -614,13 +639,50 @@
     const old = { ...e };
     Object.assign(e, rec, { updated_at: nowIso() });
     const cap = (s) => s[0].toUpperCase() + s.slice(1);
-    if (old.outcome !== e.outcome) addActivity(e.id, u.id, 'status_change', `${cap(old.outcome)} → ${cap(e.outcome)}`);
+    if (old.outcome !== e.outcome) {
+      addActivity(e.id, u.id, 'status_change', `${cap(old.outcome)} → ${cap(e.outcome)}`);
+      clearRequest(e);
+    }
+    if (rec.approvalRequest) saveRequest(e, u, rec.approvalRequest, String(b.comment || '').trim());
     if (old.salesperson_id !== e.salesperson_id) addActivity(e.id, u.id, 'reassigned', `${byId(db.users, old.salesperson_id).name} → ${byId(db.users, e.salesperson_id).name}`);
     const labels = { customer_name: 'name', postcode: 'postcode', phone: 'phone', email: 'email', model_id: 'model', used_make_id: 'make', used_extra_model_id: 'model', used_model_id: 'model', stock_number: 'stock number', source_id: 'source', test_drive: 'test drive', trade_in: 'trade-in', finance: 'finance', next_followup_at: 'next follow-up', entry_date: 'date of entry', franchise_id: 'site/brand' };
     const changed = [...new Set(Object.entries(labels).filter(([k]) => old[k] !== e[k]).map(([, l]) => l))];
     if (changed.length) addActivity(e.id, u.id, 'edited', `Changed ${changed.join(', ')}`);
-    if (b.comment && String(b.comment).trim()) addActivity(e.id, u.id, 'comment', String(b.comment).trim());
+    if (b.comment && String(b.comment).trim() && !rec.approvalRequest) addActivity(e.id, u.id, 'comment', String(b.comment).trim());
     audit(u.id, 'update', 'enquiry', e.id);
+    return { enquiry: present(e, u) };
+  });
+  on('POST', /^\/api\/enquiries\/(\d+)\/approval$/, (q, b, [id]) => {
+    const u = meReady();
+    const e = visible(u, id);
+    if (!e.pending_outcome) bad(null, 'There is nothing waiting for approval on this enquiry');
+    if (!(isManager(u) && hasFranchise(u, e.franchise_id))) fail(403, 'Only the sales manager for this brand and site can approve this');
+    const reason = String(b.reason || '').trim();
+    if (!reason) bad('reason', 'Reason is required');
+    const what = e.pending_outcome === 'sold' ? 'sale' : 'lost enquiry';
+    if (b.decision === 'approve') {
+      Object.assign(e, {
+        outcome: e.pending_outcome,
+        lost_reason_id: e.pending_outcome === 'lost' ? Number(b.lost_reason_id) || e.pending_lost_reason_id : null,
+        sold_at: e.pending_outcome === 'sold' ? e.pending_at : null,
+        sold_date: e.pending_outcome === 'sold' ? e.pending_date : null,
+        closed_at: e.pending_at,
+        next_followup_at: null,
+      });
+      addActivity(e.id, u.id, 'approved', `Approved ${what}: ${reason}`);
+    } else {
+      if (!e.next_followup_at || e.next_followup_at < today()) e.next_followup_at = today();
+      addActivity(e.id, u.id, 'declined', `Declined ${what}: ${reason}`);
+    }
+    clearRequest(e);
+    return { enquiry: present(e, u) };
+  });
+  on('POST', /^\/api\/enquiries\/(\d+)\/withdraw$/, (q, b, [id]) => {
+    const u = meReady();
+    const e = visible(u, id);
+    if (!e.pending_outcome) bad(null, 'There is nothing waiting for approval on this enquiry');
+    addActivity(e.id, u.id, 'request_withdrawn', `Withdrew the ${e.pending_outcome} request`);
+    clearRequest(e);
     return { enquiry: present(e, u) };
   });
   on('POST', /^\/api\/enquiries\/(\d+)\/followup$/, (q, b, [id]) => {

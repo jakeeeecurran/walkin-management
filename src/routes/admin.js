@@ -102,7 +102,7 @@ module.exports = function adminRoutes({ db }) {
 
   router.put('/logo', (req, res) => {
     const data = String(req.body?.data_url ?? '');
-    if (data && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(data)) {
+    if (data && data !== '/sunco-logo.png' && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(data)) {
       throw new v.ValidationError('logo', 'Logo must be a PNG, JPG, WebP or SVG image');
     }
     if (data.length > 400_000) throw new v.ValidationError('logo', 'Logo must be under about 300 KB');
