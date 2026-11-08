@@ -325,7 +325,7 @@ Customer details are stored on each enquiry rather than in a separate customers 
 ### Built differently from the plan, or not built yet
 - **Postcode → suburb check** (§4) is not built: it needs an Australian postcode dataset. Postcodes are checked for format and range only.
 - **Escalation emails** go in the manager's morning email as a highlighted "Overdue by X+ days" section, not as separate emails.
-- **Backups are not encrypted** by the app. Keep `BACKUP_DIR` on an encrypted disk or a private cloud folder.
+- **Backups:** backups emailed off-site are encrypted (passphrase set in Admin). Copies kept on the server are not, so keep `BACKUP_DIR` on a protected disk.
 - **Customer removal requests** blank the enquiry's contact details, comments and audit copies straight away. Older backups still hold them until those backups roll off (30 days daily / 12 months monthly).
 - **Live updates between screens** (the old prototype's Socket.IO) were dropped. Lists refresh when you open or change them.
 - **Model variants/trims** are not built (v1 has model only).

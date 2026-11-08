@@ -33,6 +33,18 @@ const SETTING_RULES = {
   'backup.time': (x) => time(x, 'backup_time'),
   'backup.keep_daily': (x) => intRange(x, 'keep_daily', 7, 365),
   'backup.keep_monthly': (x) => intRange(x, 'keep_monthly', 0, 120),
+  'backup.email_enabled': (x) => String(v.bool(x)),
+  'backup.email_to': (x) => {
+    const list = String(x ?? '').split(/[,;\s]+/).filter(Boolean);
+    for (const e of list) v.email(e, 'backup_email_to');
+    return list.join(', ');
+  },
+  'backup.email_passphrase': (x) => {
+    const p = String(x ?? '');
+    if (p.length < 12) throw new v.ValidationError('backup_email_passphrase', 'Backup passphrase must be at least 12 characters');
+    return p;
+  },
+  'backup.email_max_mb': (x) => intRange(x, 'backup_email_max_mb', 1, 50),
 };
 
 function colour(x, field) {
@@ -63,22 +75,27 @@ module.exports = function adminRoutes({ db }) {
   router.get('/settings', (req, res) => {
     const s = getSettings(db);
     const hasPassword = !!s['email.smtp_password'];
+    const hasPassphrase = !!s['backup.email_passphrase'];
     delete s['email.smtp_password'];
-    res.json({ settings: s, smtp_password_set: hasPassword });
+    delete s['backup.email_passphrase'];
+    res.json({ settings: s, smtp_password_set: hasPassword, backup_passphrase_set: hasPassphrase });
   });
 
   router.put('/settings', (req, res) => {
     const body = req.body || {};
     const changes = {};
+    if (v.bool(body['backup.email_enabled']) && !body['backup.email_passphrase'] && !getSettings(db)['backup.email_passphrase']) {
+      throw new v.ValidationError('backup_email_passphrase', 'Set a backup passphrase before switching on backup emails');
+    }
     for (const [key, value] of Object.entries(body)) {
       const rule = SETTING_RULES[key];
       if (!rule) throw badRequest(`Unknown setting ${key}`);
-      if (key === 'email.smtp_password' && (value === '' || value == null)) continue; // blank = keep current
+      if ((key === 'email.smtp_password' || key === 'backup.email_passphrase') && (value === '' || value == null)) continue; // blank = keep current
       changes[key] = rule(value);
     }
     transaction(db, () => {
       for (const [k, val] of Object.entries(changes)) setSetting(db, k, val);
-      log(req, 'update', 'settings', null, null, Object.fromEntries(Object.entries(changes).map(([k, x]) => [k, k.includes('password') ? '***' : x])));
+      log(req, 'update', 'settings', null, null, Object.fromEntries(Object.entries(changes).map(([k, x]) => [k, /password|passphrase/.test(k) ? '***' : x])));
     });
     res.json({ ok: true });
   });

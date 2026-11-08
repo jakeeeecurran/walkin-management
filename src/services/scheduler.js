@@ -28,12 +28,21 @@ function createScheduler({ db, backups, mailer, log = console }) {
         lastRun.backup = today;
         const already = backups.list().some((b) => b.kind === 'nightly' && b.date === today);
         if (!already) {
+          let made = null;
           try {
-            backups.create('nightly');
+            made = backups.create('nightly');
           } catch (err) {
             log.error('Nightly backup failed:', err);
             db.prepare("INSERT INTO audit_log (action, entity, after_json) VALUES ('backup_failed', 'backup', ?)").run(JSON.stringify({ error: String(err.message) }));
             await mailer.sendAdminAlert('Nightly backup FAILED', `The nightly database backup failed: ${err.message}`);
+          }
+          if (made) {
+            try {
+              await mailer.sendBackup(backups, made.name);
+            } catch (err) {
+              log.error('Emailing the nightly backup failed:', err);
+              db.prepare("INSERT INTO audit_log (action, entity, after_json) VALUES ('backup_email_failed', 'backup', ?)").run(JSON.stringify({ error: String(err.message) }));
+            }
           }
         }
       }

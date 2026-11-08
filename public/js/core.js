@@ -87,6 +87,12 @@
     mail: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM22 6l-10 7L2 6',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.3-4.3',
     back: 'M15 18l-6-6 6-6',
+    alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
+    clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6v6l4 2',
+    walk: 'M13 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM9 21l2-6 2 2v4M7 12l3-4 4 1 2 3M11 15l-1-4',
+    inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1Z',
+    check: 'M20 6 9 17l-5-5',
+    shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z',
   };
   CRM.icon = function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -133,6 +139,8 @@
   CRM.ROLE = { salesperson: 'Salesperson', sales_manager: 'Sales Manager', general_manager: 'General Manager' };
   CRM.initials = (name) => (name || '?').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   CRM.pct = (x) => (x == null ? '–' : `${x}%`);
+  CRM.avatar = (name, colour) => h('span', { class: 'avatar', style: { background: colour || 'var(--primary)' }, 'aria-hidden': 'true' }, CRM.initials(name));
+  CRM.empty = (title, text, icon = 'inbox') => h('div', { class: 'empty' }, h('div', { class: 'ico' }, CRM.icon(icon)), h('b', null, title), text ? h('div', { class: 'small' }, text) : null);
 
   // ---- Reference data helpers ----
   CRM.isManager = () => CRM.state.me && (CRM.state.me.full_access || CRM.state.me.role === 'sales_manager');

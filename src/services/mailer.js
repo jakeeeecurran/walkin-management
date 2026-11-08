@@ -29,14 +29,14 @@ function createMailer({ db, transportFactory = nodemailer.createTransport }) {
     };
   }
 
-  async function send(to, subject, html, text, cfg = config()) {
+  async function send(to, subject, html, text, cfg = config(), attachments) {
     const transport = transportFactory({
       host: cfg.host,
       port: cfg.port,
       secure: cfg.secure,
       auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
     });
-    await transport.sendMail({ from: cfg.from, to, subject, html, text });
+    await transport.sendMail({ from: cfg.from, to, subject, html, text, ...(attachments ? { attachments } : {}) });
   }
 
   function wrap(cfg, title, bodyHtml) {
@@ -154,13 +154,67 @@ ${rows ? `<table style="border-collapse:collapse;font-size:14px"><tr style="colo
     }
   }
 
+  // Backups can be emailed more than once a day (e.g. "email now"), so a repeat entry is fine to skip.
+  function recordQuiet(...args) {
+    try {
+      record(...args);
+    } catch {
+      /* already logged today */
+    }
+  }
+
+  // Emails a backup off-site as an encrypted attachment that can be uploaded straight back in
+  // (Admin → Backups → Restore, or `npm run restore` if the app won't start).
+  async function sendBackup(backups, name, { force } = {}) {
+    const cfg = config();
+    const s = getSettings(db);
+    if (!force && s['backup.email_enabled'] !== '1') return { sent: 0, skipped: 'backup emails are switched off' };
+    if (!cfg.host || !cfg.from) return { sent: 0, skipped: 'email is not set up' };
+    const passphrase = s['backup.email_passphrase'];
+    if (!passphrase) return { sent: 0, skipped: 'no backup passphrase set' };
+    const to = (s['backup.email_to'] || '')
+      .split(/[,;\s]+/)
+      .filter(Boolean)
+      .concat(s['backup.email_to'] ? [] : db.prepare("SELECT email FROM users WHERE active = 1 AND is_admin = 1 AND email IS NOT NULL AND email != ''").all().map((r) => r.email));
+    if (!to.length) return { sent: 0, skipped: 'no one to send it to (add an address or an admin email)' };
+    const day = localDate(new Date(), cfg.tz);
+    const file = backups.packed(name, passphrase);
+    const maxBytes = Number(s['backup.email_max_mb'] || 20) * 1024 * 1024;
+    const sizeMb = (file.content.length / 1024 / 1024).toFixed(1);
+    const counts = db.prepare('SELECT (SELECT COUNT(*) FROM enquiries) AS enquiries, (SELECT COUNT(*) FROM users) AS users').get();
+    if (file.content.length > maxBytes) {
+      const msg = `Tonight's backup is ${sizeMb} MB, too large to email (limit ${s['backup.email_max_mb']} MB). It is saved on the server as ${name}. Download it from Admin → Backups and store it somewhere safe.`;
+      await send(to.join(', '), `Sunco CRM backup ${day}: too large to email`, wrap(cfg, 'Backup too large to email', `<p>${esc(msg)}</p>`), msg, cfg);
+      recordQuiet('backup', null, day, 'skipped', msg);
+      return { sent: 0, skipped: 'too large to email' };
+    }
+    const title = `Sunco CRM backup ${day}`;
+    const html = `<p>Attached is the daily backup of the Walk-In CRM (${counts.enquiries} enquiries, ${counts.users} users, ${sizeMb} MB). <b>Keep this email.</b></p>
+<p><b>If the CRM ever breaks or the server is lost:</b></p>
+<ol>
+<li>Get the CRM running again (same server once fixed, or a new one): install it and create an admin login.</li>
+<li>Sign in, go to <b>Admin → Backups → Restore from a backup file</b>, choose the attached <code>${esc(file.filename)}</code> file and enter the backup passphrase.</li>
+<li>Or, on the server: <code>npm run restore -- ${esc(file.filename)}</code></li>
+</ol>
+<p>The file is encrypted. It can only be opened with the backup passphrase set in Admin → Email &amp; settings. Keep that passphrase written down somewhere safe, away from the server.</p>`;
+    const text = `Attached is the daily backup of the Walk-In CRM. To restore: Admin → Backups → Restore from a backup file, choose ${file.filename} and enter the backup passphrase. Or run: npm run restore -- ${file.filename}`;
+    try {
+      await send(to.join(', '), title, wrap(cfg, title, html), text, cfg, [{ filename: file.filename, content: file.content, contentType: 'application/octet-stream' }]);
+      recordQuiet('backup', null, day, 'sent', `${name} to ${to.length} recipient(s)`);
+      return { sent: to.length };
+    } catch (err) {
+      recordQuiet('backup', null, day, 'failed', String(err.message).slice(0, 300));
+      throw err;
+    }
+  }
+
   async function sendTest(to) {
     const cfg = config();
     if (!cfg.host || !cfg.from) throw Object.assign(new Error('Enter the SMTP server and From address first'), { status: 400 });
     await send(to, 'Test email from the Walk-In CRM', wrap(cfg, 'Email is working', '<p>This is a test email. Reminders will be sent from this address.</p>'), 'Email is working.', cfg);
   }
 
-  return { config, sendDigests, sendAdminAlert, sendTest, morningEmail, endOfDayEmail };
+  return { config, sendDigests, sendAdminAlert, sendTest, sendBackup, morningEmail, endOfDayEmail };
 }
 
 module.exports = { createMailer };

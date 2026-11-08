@@ -68,7 +68,7 @@
 
     main.replaceChildren(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Reports'), h('p', { class: 'muted small' }, CRM.isManager() ? 'Figures for the brands and sites you look after.' : 'Your own figures.')), exportBtn),
-      h('div', { class: 'stack', style: { marginBottom: '16px' } }, tabs, h('div', { class: 'filters' }, filters)),
+      h('div', { class: 'card toolbar-card' }, tabs, filters.length ? h('div', { class: 'filters' }, filters) : null),
       body
     );
 
@@ -154,7 +154,7 @@
               )
             )
           )
-        : h('p', { class: 'empty' }, emptyText)
+        : CRM.empty(emptyText, null, 'check')
     );
   }
 

@@ -1,9 +1,5 @@
 // Backups, spreadsheet import and test email (general manager / admin only).
 const express = require('express');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
 const v = require('../lib/validate');
 const scope = require('../lib/scope');
 const { audit } = require('../lib/audit');
@@ -53,18 +49,27 @@ module.exports = function systemRoutes({ db, backups, importer, mailer }) {
     res.json(result);
   });
 
+  // Restore from an uploaded file: an emailed .sunco-backup (passphrase in a header), .gz or .db.
   router.post('/backups-upload/restore', upload('200mb'), (req, res) => {
     adminOnly(req);
     if (req.get('x-confirm') !== 'RESTORE') throw badRequest('Type RESTORE to confirm');
     if (!Buffer.isBuffer(req.body) || !req.body.length) throw badRequest('Choose a backup file');
-    const tmp = path.join(os.tmpdir(), `sunco-restore-${crypto.randomBytes(6).toString('hex')}.db`);
-    fs.writeFileSync(tmp, req.body);
+    const passphrase = req.get('x-backup-passphrase') ? decodeURIComponent(req.get('x-backup-passphrase')) : '';
+    const result = backups.restoreFromBuffer(req.body, passphrase);
+    audit(db, { userId: req.user.id, action: 'restore', entity: 'backup', after: { name: 'uploaded file', ...result } });
+    res.json(result);
+  });
+
+  router.post('/backups/:name/email', async (req, res, next) => {
     try {
-      const result = backups.restore(tmp);
-      audit(db, { userId: req.user.id, action: 'restore', entity: 'backup', after: { name: 'uploaded file', ...result } });
-      res.json(result);
-    } finally {
-      fs.rmSync(tmp, { force: true });
+      if (!backups.filePath(req.params.name)) throw notFound('Backup not found');
+      const r = await mailer.sendBackup(backups, req.params.name, { force: true });
+      if (r.skipped) throw badRequest(`Not sent: ${r.skipped}`);
+      audit(db, { userId: req.user.id, action: 'email_backup', entity: 'backup', after: { name: req.params.name, recipients: r.sent } });
+      res.json(r);
+    } catch (err) {
+      if (!err.status) err = Object.assign(new Error(`Could not send: ${err.message}`), { status: 400 });
+      next(err);
     }
   });
 

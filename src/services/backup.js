@@ -2,9 +2,12 @@
 // (safe while the app is running). Nightly copies are pruned to N daily + M monthly.
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
+const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const { pack, unpack, EXTENSION } = require('../lib/backupfile');
 const { getSetting } = require('../lib/settings');
-const { transaction } = require('../db');
+const { transaction, migrate } = require('../db');
 
 const NAME = /^sunco-crm-(\d{4}-\d{2}-\d{2})-(\d{6})-(nightly|manual|pre-restore)\.db$/;
 
@@ -97,11 +100,25 @@ function createBackupService({ db, dir }) {
   }
 
   // Replaces all data with the backup's contents. A safety backup is taken first.
+  // Backups from an older version of the app are upgraded (on a temporary copy) first.
   function restore(file) {
-    const { version, counts } = inspect(file);
-    if (version !== currentVersion()) {
-      throw Object.assign(new Error(`That backup is from a different version of the app (v${version}, this is v${currentVersion()})`), { status: 400 });
+    const { version } = inspect(file);
+    if (version > currentVersion()) {
+      throw Object.assign(new Error(`That backup is from a newer version of the app (v${version}, this is v${currentVersion()}). Update the app first.`), { status: 400 });
     }
+    if (version < currentVersion()) {
+      const tmp = path.join(os.tmpdir(), `sunco-upgrade-${crypto.randomBytes(6).toString('hex')}.db`);
+      fs.copyFileSync(file, tmp);
+      try {
+        const old = new DatabaseSync(tmp);
+        migrate(old);
+        old.close();
+        return restore(tmp);
+      } finally {
+        fs.rmSync(tmp, { force: true });
+      }
+    }
+    const { counts } = inspect(file);
     const safety = create('pre-restore');
     db.exec('PRAGMA foreign_keys = OFF');
     try {
@@ -120,7 +137,27 @@ function createBackupService({ db, dir }) {
     return { restored: counts, safety_backup: safety.name };
   }
 
-  return { dir, create, list, prune, filePath, restore, inspect };
+  // Restores from an uploaded file: an emailed .sunco-backup (needs the passphrase), a .gz, or a .db.
+  function restoreFromBuffer(buffer, passphrase) {
+    const data = unpack(buffer, passphrase);
+    const tmp = path.join(os.tmpdir(), `sunco-restore-${crypto.randomBytes(6).toString('hex')}.db`);
+    fs.writeFileSync(tmp, data);
+    try {
+      return restore(tmp);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+
+  // The encrypted, compressed copy of a stored backup that goes out by email.
+  function packed(name, passphrase) {
+    const file = filePath(name);
+    if (!file) throw new Error('Backup not found');
+    const b = info(name);
+    return { filename: `sunco-crm-backup-${b.date}-${b.time.replace(':', '')}${EXTENSION}`, content: pack(fs.readFileSync(file), passphrase) };
+  }
+
+  return { dir, create, list, prune, filePath, restore, restoreFromBuffer, packed, inspect };
 }
 
 module.exports = { createBackupService };

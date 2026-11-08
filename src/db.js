@@ -50,4 +50,4 @@ function transaction(db, fn) {
   }
 }
 
-module.exports = { openDatabase, transaction };
+module.exports = { openDatabase, transaction, migrate };

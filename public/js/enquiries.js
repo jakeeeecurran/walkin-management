@@ -25,7 +25,8 @@
       h(
         'a',
         { class: ['erow', selected && 'selected'], href: `#/enquiries/${e.id}` },
-        h('div', null, h('div', { class: 'name' }, e.customer_name), h('div', { class: 'small muted' }, [e.brand, e.vehicle].filter(Boolean).join(' '))),
+        CRM.avatar(e.customer_name, e.brand_colour),
+        h('div', null, h('div', { class: 'name' }, e.customer_name), h('div', { class: 'sub' }, [e.brand, e.vehicle].filter(Boolean).join(' '))),
         h('div', { class: 'right' }, outcomeBadge(e)),
         compact
           ? null
@@ -59,21 +60,21 @@
         'section',
         { class: 'card' },
         h('div', { class: 'card-head' }, h('h2', { class: cls }, `${title} (${items.length})`)),
-        items.length ? h('ul', { class: 'elist' }, items.map((e) => enquiryRow(e))) : h('p', { class: 'empty' }, emptyText)
+        items.length ? h('ul', { class: 'elist' }, items.map((e) => enquiryRow(e))) : CRM.empty(emptyText, null, 'check')
       );
 
     main.replaceChildren(
-      h('div', { class: 'page-head' }, h('div', null, h('h1', null, `G'day ${me.name.split(' ')[0]}`), h('p', { class: 'muted' }, CRM.fmtDate(today, { weekday: true, year: true })))),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'muted small', style: { margin: '0 0 4px', fontWeight: 600 } }, CRM.fmtDate(today, { weekday: true, year: true })), h('h1', null, `G'day ${me.name.split(' ')[0]}`))),
       h(
         'div',
         { class: 'today-hero' },
-        h('a', { class: 'btn btn-accent btn-big', href: '#/new' }, '+ New walk-in'),
+        h('a', { class: 'new-cta', href: '#/new' }, h('div', null, h('b', null, 'New walk-in'), h('span', null, 'Log a customer in under 30 seconds')), h('span', { class: 'plus', 'aria-hidden': 'true' }, '+')),
         h(
           'div',
           { class: 'stat-row' },
-          h('a', { class: ['stat', overdue.length && 'alert'], href: '#/enquiries?view=overdue' }, h('b', null, overdue.length), h('span', null, 'Overdue')),
-          h('a', { class: 'stat', href: '#/enquiries?view=due' }, h('b', null, dueToday.length), h('span', null, 'Follow up today')),
-          h('a', { class: 'stat', href: `#/enquiries?view=today` }, h('b', null, mine.total), h('span', null, CRM.isManager() ? 'Walk-ins today' : 'My walk-ins today'))
+          h('a', { class: ['stat', overdue.length && 'alert'], href: '#/enquiries?view=overdue' }, h('div', { class: 'ico' }, CRM.icon('alert')), h('b', null, overdue.length), h('span', null, 'Overdue')),
+          h('a', { class: ['stat', dueToday.length && 'warn'], href: '#/enquiries?view=due' }, h('div', { class: 'ico' }, CRM.icon('clock')), h('b', null, dueToday.length), h('span', null, 'Follow up today')),
+          h('a', { class: 'stat', href: `#/enquiries?view=today` }, h('div', { class: 'ico' }, CRM.icon('walk')), h('b', null, mine.total), h('span', null, CRM.isManager() ? 'Walk-ins today' : 'My walk-ins today'))
         )
       ),
       overdue.length ? section('Overdue follow-ups', overdue, '', '') : null,
@@ -132,7 +133,7 @@
     function draw() {
       countEl.textContent = `${listState.total} enquir${listState.total === 1 ? 'y' : 'ies'}`;
       if (!listState.items.length) {
-        results.replaceChildren(h('p', { class: 'empty card' }, 'No enquiries match.'));
+        results.replaceChildren(h('div', { class: 'card' }, CRM.empty('No enquiries match', 'Try a different filter or search.', 'search')));
         return;
       }
       const cards = h('ul', { class: 'elist only-narrow' }, listState.items.map((e) => enquiryRow(e, { selected: e.id === Number(selectedId) })));
@@ -342,16 +343,17 @@
       h(
         'article',
         { class: 'card' },
-        inSplit ? h('a', { class: 'btn btn-ghost btn-sm', href: '#/enquiries', style: { marginBottom: '8px' } }, CRM.icon('back'), 'Back to list') : null,
+        inSplit ? h('a', { class: 'btn btn-ghost btn-sm back-link', href: '#/enquiries', style: { marginBottom: '10px', marginLeft: '-8px' } }, CRM.icon('back'), 'Back to list') : null,
         h(
           'div',
           { class: 'detail-head' },
+          CRM.avatar(e.customer_name, e.brand_colour),
           h('div', null, h('h1', null, e.customer_name), h('div', { class: 'muted small' }, `Enquiry #${e.id} · ${[e.brand, e.vehicle].filter(Boolean).join(' ')}`), h('div', { class: 'badges' }, outcomeBadge(e), brandBadge(e)))
         ),
         contact,
         actions.length ? h('div', { class: 'actions' }, actions) : null,
         panel,
-        h('hr', { style: { border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' } }),
+        h('hr', { class: 'divider' }),
         facts
       ),
       h('section', { class: 'card' }, h('h2', null, 'History'), commentForm, h('div', { style: { height: '12px' } }), timeline)
@@ -772,7 +774,7 @@
       ),
       h(
         'div',
-        { class: 'btn-row' },
+        { class: 'form-actions' },
         h('button', { type: 'submit', class: 'btn-primary btn-big', style: { flex: '1' } }, existing ? 'Save changes' : 'Save walk-in'),
         h('a', { class: 'btn btn-big', href: existing ? `#/enquiries/${existing.id}` : '#/today' }, 'Cancel')
       )
@@ -783,7 +785,9 @@
     drawVehicle();
     drawOutcome();
     drawSalesperson();
-    main.replaceChildren(h('div', { class: 'page-head' }, h('h1', null, existing ? `Edit ${existing.customer_name}` : 'New walk-in')), h('div', { style: { maxWidth: '760px' } }, form));
+    main.replaceChildren(
+      h('div', { style: { maxWidth: '780px' } }, h('div', { class: 'page-head' }, h('div', null, h('h1', null, existing ? `Edit ${existing.customer_name}` : 'New walk-in'), h('p', { class: 'muted' }, existing ? `Enquiry #${existing.id}` : 'Fields marked * are required. Everything else is optional.'))), form)
+    );
     if (!existing) (s.brand_id ? name : brandField.querySelector('button'))?.focus();
   }
 })();

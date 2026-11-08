@@ -35,7 +35,9 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
   - Salespeople get their follow-ups each morning.
   - Managers get a morning summary (overdue follow-ups and yesterday's walk-ins) and an end-of-day summary.
   - Admins are alerted if a nightly backup fails.
-- **Backups:** an automatic nightly copy of the database (30 daily + 12 monthly kept), plus "Back up now", download and restore.
+- **Backups:**
+  - an automatic nightly copy of the database (30 daily + 12 monthly kept), plus "Back up now", download and restore;
+  - the nightly backup can also be **emailed off-site** as an encrypted `.sunco-backup` file that uploads straight back in (see *If something breaks*).
 
 ## Running it
 
@@ -56,7 +58,26 @@ npm start
 3. **Team:** add the sales managers (at least one per site) and tick their brands and sites; they then add their salespeople.
 4. **Admin → Import spreadsheet:** bring in the open enquiries from the old workbook.
 5. **Admin → Email & settings:** enter the email account details, send a test, and switch reminders on.
-6. **Admin → Backups:** set `BACKUP_DIR` to a folder on another drive or a synced cloud folder.
+6. **Admin → Email & settings → Nightly backup:**
+   - Turn on "Email the backup every night".
+   - Enter an off-site address and a backup passphrase. **Write the passphrase down and keep it away from the server.**
+7. **Admin → Backups:** use "Email" on a backup once to check it arrives. Optionally set `BACKUP_DIR` to another drive or a synced cloud folder.
+
+## If something breaks
+
+Every night the CRM emails an encrypted backup file (`sunco-crm-backup-YYYY-MM-DD-HHMM.sunco-backup`) to the address set in Admin. To get running again:
+
+**If the app still opens:** Admin → Backups → *Restore from a backup file*. Choose the file from the most recent backup email, enter the backup passphrase and type RESTORE.
+
+**If the server is lost or the app won't start:**
+1. Set the CRM up on any server (see *Running it*).
+2. Save the attachment from the latest backup email onto that server.
+3. Run `npm run restore -- sunco-crm-backup-2026-11-08-0200.sunco-backup`, enter the backup passphrase, then `npm start`.
+   - If the database is damaged, it is moved aside automatically first.
+4. Everyone signs in with their usual username and password.
+
+Backups made by an older version of the app are upgraded automatically when restored. A safety copy of whatever was there before is always saved first.
+
 
 ## Configuration (environment variables)
 
@@ -65,7 +86,7 @@ npm start
 | `PORT` | `3000` | Port to listen on |
 | `DATA_DIR` | `./data` | Database and session secret. |
 | `DB_PATH` | `$DATA_DIR/sunco-crm.db` | Database file |
-| `BACKUP_DIR` | `$DATA_DIR/backups` | Where nightly/manual backups go. **Point this at a different drive or a synced cloud folder.** |
+| `BACKUP_DIR` | `$DATA_DIR/backups` | Where nightly/manual backups are kept on the server. Turn on emailed backups as well, so a copy is off-site. |
 | `JWT_SECRET` | generated into `$DATA_DIR/.session-secret` | Session signing secret (min 32 characters). Set it explicitly in the cloud. |
 | `NODE_ENV` | | `production` turns on HTTPS-only cookies |
 | `COOKIE_SECURE` | `true` in production | Set `false` only when serving over plain HTTP on a private network |
@@ -108,6 +129,7 @@ public/                the web app (no build step)
   js/main.js           sign-in, navigation
 test/                  API tests (node --test)
 scripts/create-user.js first admin account
+scripts/restore.js     restore from a backup file from the command line
 ```
 
 ## Tests

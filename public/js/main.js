@@ -44,10 +44,17 @@
       CRM.isFull() ? ['admin', '#/admin', 'Admin', 'cog'] : null,
       ['account', '#/account', 'Account', 'user'],
     ].filter(Boolean);
+    const link = ([key, href, label, icon]) => h('a', { href, dataset: { nav: key } }, CRM.icon(icon), label);
+    const work = items.filter(([k]) => ['today', 'enquiries', 'new', 'reports'].includes(k));
+    const manage = items.filter(([k]) => ['team', 'admin'].includes(k));
     document.getElementById('nav').replaceChildren(
-      ...items.map(([key, href, label, icon]) => h('a', { href, dataset: { nav: key } }, CRM.icon(icon), label)),
-      h('hr'),
-      h('a', { href: '#', onclick: (e) => { e.preventDefault(); CRM.logout(); } }, 'Sign out')
+      h('div', { class: 'nav-label' }, 'Sales'),
+      work.map(link),
+      manage.length ? [h('div', { class: 'nav-label' }, 'Manage'), manage.map(link)] : null,
+      h('div', { class: 'spacer' }),
+      link(['account', '#/account', 'Account', 'user']),
+      h('a', { href: '#', onclick: (e) => { e.preventDefault(); CRM.logout(); } }, CRM.icon('back'), 'Sign out'),
+      h('div', { class: 'me' }, CRM.avatar(me.name), h('div', null, h('b', null, me.name), h('span', null, CRM.ROLE[me.role])))
     );
     // Phone tab bar: Today, Enquiries, +New, Reports, More (team/admin/account)
     const more = CRM.isFull() ? '#/admin' : CRM.isManager() ? '#/team' : '#/account';
@@ -127,7 +134,22 @@
       h('label', { class: 'check' }, remember, 'Keep me signed in on this device (30 days)'),
       h('button', { type: 'submit', class: 'btn-primary btn-big' }, 'Sign in')
     );
-    main().replaceChildren(h('section', { class: 'card narrow' }, h('h1', { style: { marginBottom: '16px' } }, 'Sign in'), form, h('p', { class: 'muted small', style: { marginTop: '16px' } }, 'Forgotten your password? Ask your sales manager to reset it.')));
+    const b = CRM.state.branding || {};
+    main().replaceChildren(
+      h(
+        'div',
+        { class: 'auth-wrap' },
+        h(
+          'section',
+          { class: 'card narrow' },
+          b.logo_url ? h('img', { src: b.logo_url, alt: '', style: { maxHeight: '48px', maxWidth: '200px', marginBottom: '14px' } }) : h('div', { class: 'brand-mark' }, (b.name || 'S')[0]),
+          h('h1', null, 'Welcome back'),
+          h('p', { class: 'muted', style: { margin: '6px 0 22px' } }, `Sign in to the ${b.name || 'Sunco Motors'} Walk-In CRM`),
+          form,
+          h('p', { class: 'muted small', style: { margin: '18px 0 0', textAlign: 'center' } }, 'Forgotten your password? Ask your sales manager to reset it.')
+        )
+      )
+    );
     username.focus();
   };
 
@@ -157,7 +179,7 @@
       h('button', { type: 'submit', class: 'btn-primary btn-big' }, 'Save password'),
       h('button', { type: 'button', class: 'btn-ghost', onclick: () => CRM.logout() }, 'Sign out')
     );
-    main().replaceChildren(h('section', { class: 'card narrow' }, h('h1', null, 'Set your password'), h('p', { class: 'muted' }, "You're signed in with a temporary password. Choose your own to continue."), form));
+    main().replaceChildren(h('div', { class: 'auth-wrap' }, h('section', { class: 'card narrow' }, h('h1', null, 'Set your password'), h('p', { class: 'muted', style: { margin: '6px 0 22px' } }, "You're signed in with a temporary password. Choose your own to continue."), form)));
     cur.focus();
   }
 

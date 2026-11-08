@@ -483,7 +483,7 @@
 
   // ---- Settings & email ----
   ADMIN.settings = async (el) => {
-    const { settings: s, smtp_password_set: pwSet } = await CRM.get('/api/admin/settings');
+    const { settings: s, smtp_password_set: pwSet, backup_passphrase_set: ppSet } = await CRM.get('/api/admin/settings');
     const inp = (key, attrs = {}) => h('input', { value: s[key] ?? '', ...attrs });
     const f = {
       'followup.escalation_days': inp('followup.escalation_days', { type: 'number', min: 1, max: 60 }),
@@ -501,6 +501,9 @@
       'backup.time': inp('backup.time', { type: 'time' }),
       'backup.keep_daily': inp('backup.keep_daily', { type: 'number', min: 7 }),
       'backup.keep_monthly': inp('backup.keep_monthly', { type: 'number', min: 0 }),
+      'backup.email_enabled': h('input', { type: 'checkbox', checked: s['backup.email_enabled'] === '1' }),
+      'backup.email_to': inp('backup.email_to', { placeholder: 'Leave blank to send to all admins' }),
+      'backup.email_passphrase': h('input', { type: 'password', autocomplete: 'new-password', placeholder: ppSet ? '•••••••• (saved, leave blank to keep)' : 'At least 12 characters' }),
     };
     const form = h(
       'form',
@@ -541,7 +544,10 @@
         'section',
         { class: 'card stack' },
         h('h2', null, 'Nightly backup'),
-        h('div', { class: 'form-grid cols-3' }, CRM.field('Run at', f['backup.time'], { name: 'backup_time' }), CRM.field('Keep daily copies', f['backup.keep_daily'], { name: 'keep_daily' }), CRM.field('Keep monthly copies', f['backup.keep_monthly'], { name: 'keep_monthly' }))
+        h('div', { class: 'form-grid cols-3' }, CRM.field('Run at', f['backup.time'], { name: 'backup_time' }), CRM.field('Keep daily copies', f['backup.keep_daily'], { name: 'keep_daily' }), CRM.field('Keep monthly copies', f['backup.keep_monthly'], { name: 'keep_monthly' })),
+        h('div', { class: 'callout' }, CRM.icon('shield'), h('p', { class: 'small' }, 'Email the nightly backup off-site, so the CRM can be rebuilt even if the server is lost. The attachment is encrypted with the passphrase below and can be uploaded straight back in under Admin → Backups. ', h('b', null, 'Write the passphrase down and keep it somewhere safe. Without it the backup cannot be opened.'))),
+        h('label', { class: 'check' }, f['backup.email_enabled'], 'Email the backup every night'),
+        h('div', { class: 'form-grid cols-2' }, CRM.field('Send backups to', f['backup.email_to'], { name: 'backup_email_to', hint: 'One or more addresses, comma-separated. Use an address that is NOT on the same server.' }), CRM.field('Backup passphrase', f['backup.email_passphrase'], { name: 'backup_email_passphrase', hint: 'Needed to restore an emailed backup' }))
       ),
       h('div', { class: 'btn-row' }, h('button', { type: 'submit', class: 'btn-primary' }, 'Save settings'))
     );
@@ -565,6 +571,22 @@
     const status = last
       ? h('p', null, h('span', { class: 'badge badge-sold' }, 'OK'), ` Last nightly backup ${CRM.fmtDate(last.date, { year: true })} at ${last.time} (${fmtSize(last.size)}).`)
       : h('p', null, h('span', { class: 'badge badge-due' }, 'Waiting'), ' No nightly backup yet. It runs at the time set under Email & settings.');
+    const { settings: st } = await CRM.get('/api/admin/settings');
+    const emailOn = st['backup.email_enabled'] === '1';
+    const emailStatus = h(
+      'div',
+      { class: ['callout', emailOn ? 'good' : 'warn'] },
+      CRM.icon('shield'),
+      h('p', { class: 'small' }, emailOn ? `Nightly backups are emailed to ${st['backup.email_to'] || 'all admins'} as an encrypted file you can upload below to restore.` : 'Backups are only stored on this server. Turn on "Email the backup every night" under Email & settings so a copy is kept off-site in case the server fails.', ' ', h('a', { href: '#/admin/settings' }, 'Settings'))
+    );
+    const emailNow = async (name) => {
+      try {
+        const r = await CRM.post(`/api/admin/backups/${encodeURIComponent(name)}/email`, {});
+        CRM.toast(`Backup emailed to ${r.sent} recipient${r.sent === 1 ? '' : 's'}`);
+      } catch (e) {
+        CRM.fail(e);
+      }
+    };
     const restore = async (name) => {
       if (!CRM.isAdmin()) return CRM.toast('Only an admin can restore', 'error');
       const typed = h('input', { placeholder: 'Type RESTORE' });
@@ -574,13 +596,15 @@
         actions: [{ label: 'Cancel' }, { label: 'Restore', class: 'btn-danger', onClick: async () => { const r = await CRM.post(`/api/admin/backups/${encodeURIComponent(name)}/restore`, { confirm: typed.value }); CRM.toast(`Restored. Safety copy: ${r.safety_backup}`); await CRM.loadRef(true); reload(); } }],
       });
     };
-    const upload = h('input', { type: 'file', accept: '.db' });
+    const upload = h('input', { type: 'file', accept: '.sunco-backup,.db,.gz' });
+    const passphrase = h('input', { type: 'password', autocomplete: 'off', placeholder: 'Only needed for an emailed backup' });
     el.replaceChildren(
       h(
         'section',
         { class: 'card stack' },
         h('div', { class: 'card-head' }, h('h2', null, 'Backups'), h('button', { class: 'btn-primary', onclick: async () => { try { const r = await CRM.post('/api/admin/backups'); CRM.toast(`Backed up: ${r.backup.name}`); reload(); } catch (e) { CRM.fail(e); } } }, 'Back up now')),
         status,
+        emailStatus,
         data.recent_failures ? h('p', { class: 'form-error' }, 'A nightly backup failed in the last 2 days. Check the server has disk space.') : null,
         h('p', { class: 'muted small' }, `Backups are stored in ${data.location}. Keep this folder on a different drive or a synced cloud folder, and download a copy regularly. For a readable copy of every enquiry, use Reports → Export.`),
         data.items.length
@@ -602,7 +626,7 @@
                       h('td', null, b.time),
                       h('td', null, { nightly: 'Nightly', manual: 'Manual', 'pre-restore': 'Before restore' }[b.kind]),
                       h('td', null, fmtSize(b.size)),
-                      h('td', null, h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-sm', href: `/api/admin/backups/${encodeURIComponent(b.name)}`, download: b.name }, 'Download'), CRM.isAdmin() ? h('button', { class: 'btn-sm btn-ghost', onclick: () => restore(b.name) }, 'Restore') : null))
+                      h('td', null, h('div', { class: 'btn-row' }, h('a', { class: 'btn btn-sm', href: `/api/admin/backups/${encodeURIComponent(b.name)}`, download: b.name }, 'Download'), h('button', { class: 'btn-sm', onclick: () => emailNow(b.name) }, 'Email'), CRM.isAdmin() ? h('button', { class: 'btn-sm btn-ghost', onclick: () => restore(b.name) }, 'Restore') : null))
                     )
                   )
                 )
@@ -614,8 +638,9 @@
         ? h(
             'section',
             { class: 'card stack' },
-            h('h2', null, 'Restore from a downloaded backup'),
-            CRM.field('Backup file (.db)', upload),
+            h('h2', null, 'Restore from a backup file'),
+            h('p', { class: 'muted small' }, 'Use this if something has gone wrong, or after setting the CRM up on a new server: choose the file from the backup email (.sunco-backup) or a downloaded backup (.db), then enter the passphrase if asked. A safety copy of the current data is taken first.'),
+            h('div', { class: 'form-grid cols-2' }, CRM.field('Backup file', upload), CRM.field('Backup passphrase', passphrase, { name: 'passphrase' })),
             h('div', null, h('button', {
               class: 'btn-danger',
               onclick: async () => {
@@ -623,7 +648,7 @@
                 if (!f) return CRM.toast('Choose a file', 'error');
                 if (!(await CRM.confirm('Replace all data?', `All current data will be replaced with ${f.name}. A safety copy is saved first.`, 'Restore', 'btn-danger'))) return;
                 try {
-                  const r = await CRM.api('POST', '/api/admin/backups-upload/restore', f, { headers: { 'x-confirm': 'RESTORE' } });
+                  const r = await CRM.api('POST', '/api/admin/backups-upload/restore', f, { headers: { 'x-confirm': 'RESTORE', 'x-backup-passphrase': encodeURIComponent(passphrase.value) } });
                   CRM.toast(`Restored. Safety copy: ${r.safety_backup}`);
                   await CRM.loadRef(true);
                   reload();

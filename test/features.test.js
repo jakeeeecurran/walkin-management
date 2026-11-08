@@ -155,6 +155,55 @@ describe('backups', () => {
     assert.ok(list.length >= 2);
   });
 
+  test('the nightly backup is emailed encrypted, and that file restores the system', async () => {
+    const { pack, unpack } = require('../src/lib/backupfile');
+    await gm.raw('PUT', '/api/admin/settings', { 'email.smtp_host': 'smtp.example.com', 'email.from': 'crm@example.com' });
+    assert.equal((await gm.raw('PUT', '/api/admin/settings', { 'backup.email_enabled': true })).status, 400); // needs a passphrase
+    assert.equal(
+      (await gm.raw('PUT', '/api/admin/settings', { 'backup.email_enabled': true, 'backup.email_passphrase': 'correct horse battery', 'backup.email_to': 'offsite@example.com' })).status,
+      200
+    );
+    assert.equal((await gm.get('/api/admin/settings')).body.settings['backup.email_passphrase'], undefined);
+
+    await enquiry(sam, { customer_name: 'In Emailed Backup' });
+    const made = (await gm.post('/api/admin/backups', {})).body.backup;
+    const before = t.sentMail.length;
+    const r = await gm.post(`/api/admin/backups/${made.name}/email`, {});
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const mail = t.sentMail[before];
+    assert.equal(mail.to, 'offsite@example.com');
+    const att = mail.attachments[0];
+    assert.match(att.filename, /\.sunco-backup$/);
+    assert.ok(!att.content.includes(Buffer.from('In Emailed Backup'))); // encrypted
+    assert.throws(() => unpack(att.content, 'wrong passphrase!!'), /Wrong passphrase/);
+    assert.ok(unpack(att.content, 'correct horse battery').subarray(0, 15).toString() === 'SQLite format 3');
+    assert.throws(() => pack(Buffer.from('x'), 'short'));
+
+    // Simulate losing data, then upload the emailed file.
+    t.db.prepare("DELETE FROM activities WHERE enquiry_id IN (SELECT id FROM enquiries WHERE customer_name = 'In Emailed Backup')").run();
+    t.db.prepare("DELETE FROM enquiries WHERE customer_name = 'In Emailed Backup'").run();
+    const noPass = await gm.raw('POST', '/api/admin/backups-upload/restore', att.content, { 'x-confirm': 'RESTORE' });
+    assert.equal(noPass.status, 400);
+    const ok = await gm.raw('POST', '/api/admin/backups-upload/restore', att.content, { 'x-confirm': 'RESTORE', 'x-backup-passphrase': encodeURIComponent('correct horse battery') });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.ok(t.db.prepare("SELECT 1 FROM enquiries WHERE customer_name = 'In Emailed Backup'").get());
+  });
+
+  test('backups from an older version of the app are upgraded when restored', async () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { DatabaseSync } = require('node:sqlite');
+    const made = (await gm.post('/api/admin/backups', {})).body.backup;
+    const file = path.join(t.backupDir, made.name);
+    // Turn the copy into a "version 2" database by removing migration 3's record.
+    const old = new DatabaseSync(file);
+    old.exec("DELETE FROM schema_migrations WHERE version = 3; DELETE FROM settings WHERE key LIKE 'backup.email%'");
+    old.close();
+    const r = await gm.raw('POST', '/api/admin/backups-upload/restore', fs.readFileSync(file), { 'x-confirm': 'RESTORE' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(t.db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, 3);
+  });
+
   test('backup files can be downloaded by the GM', async () => {
     const name = (await gm.get('/api/admin/backups')).body.items[0].name;
     const res = await fetch(`${t.base}/api/admin/backups/${name}`, { headers: { cookie: '' } });
