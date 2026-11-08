@@ -83,7 +83,7 @@ a:focus-visible { border-radius: 6px; }
 
 /* ---------- Top bar ---------- */
 .topbar {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   height: 60px; padding: 0 16px; padding-top: env(safe-area-inset-top);
   background: color-mix(in srgb, var(--surface) 88%, transparent);

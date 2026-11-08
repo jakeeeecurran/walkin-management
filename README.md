@@ -137,3 +137,13 @@ scripts/restore.js     restore from a backup file from the command line
 ```bash
 npm test
 ```
+
+## Trial version (no server)
+
+`demo/` builds a single-page trial that runs the real screens in the browser against demo data (changes stay in that browser; email, backups, exports and import are disabled):
+
+```bash
+node demo/build.js path/to/demo-data.json trial.html
+```
+
+`demo-data.json` is an export of a demo database (sites, brands, models, users, enquiries, activities, settings; no passwords).

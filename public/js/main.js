@@ -189,7 +189,8 @@
     CRM.state.ref = null;
     setChrome(true);
     buildNav();
-    if (!location.hash || location.hash === '#' || location.hash === '#/') history.replaceState(null, '', '#/today');
+    const cur = CRM.location.get();
+    if (!cur || cur === '#' || cur === '#/') CRM.location.replace('#/today');
     await CRM.render();
   }
 

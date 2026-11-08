@@ -342,18 +342,26 @@
   // ---- Router ----
   const routes = [];
   CRM.route = (pattern, handler) => routes.push({ pattern, handler });
-  CRM.go = (hash) => {
-    if (location.hash === hash) CRM.render();
-    else location.hash = hash;
+  // Where the current page is kept. Normally the address bar; the published demo swaps in an in-memory one.
+  CRM.location = {
+    get: () => location.hash,
+    set: (hash) => { location.hash = hash; },
+    replace: (hash) => history.replaceState(null, '', hash),
   };
+  CRM.go = (hash) => {
+    if (CRM.location.get() === hash) CRM.render();
+    else CRM.location.set(hash);
+  };
+  // File downloads (exports, backups). The demo replaces this.
+  CRM.download = (url) => { window.location.href = url; };
   CRM.parseHash = () => {
-    const raw = location.hash.replace(/^#/, '') || '/today';
+    const raw = CRM.location.get().replace(/^#/, '') || '/today';
     const [path, query] = raw.split('?');
     return { path, params: Object.fromEntries(new URLSearchParams(query || '')) };
   };
   CRM.setQuery = (params) => {
     const { path } = CRM.parseHash();
-    history.replaceState(null, '', `#${path}${CRM.qs(params)}`);
+    CRM.location.replace(`#${path}${CRM.qs(params)}`);
   };
   CRM.render = async function render() {
     if (!CRM.state.me) return;

@@ -87,7 +87,7 @@
                 icon: 'download',
                 onSelect: () => {
                   const q = query();
-                  window.location.href = `/api/reports/export.csv${CRM.qs({ from: last?.period.from, to: last?.period.to, location_id: q.location_id, brand_id: q.brand_id, salesperson_id: q.salesperson_id })}`;
+                  CRM.download(`/api/reports/export.csv${CRM.qs({ from: last?.period.from, to: last?.period.to, location_id: q.location_id, brand_id: q.brand_id, salesperson_id: q.salesperson_id })}`);
                 },
               },
             ], { align: 'right' }),
