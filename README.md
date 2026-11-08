@@ -96,8 +96,20 @@ Backups made by an older version of the app are upgraded automatically when rest
 
 ### Hosting
 
-- **Local:** run it on a PC at one site. Other sites reach it over a VPN or a tunnel (e.g. Tailscale or Cloudflare Tunnel).
-- **Cloud (recommended for four sites):** any small Linux server or container host in an Australian region, behind HTTPS. Set `NODE_ENV=production`, `TRUST_PROXY=true` and `JWT_SECRET`, and keep `DATA_DIR` on a persistent disk. The app runs as a single instance because it uses an SQLite file.
+There are step-by-step guides for both options:
+
+- **[Online](docs/hosting/ONLINE.md) (recommended for four sites and phones on the road):**
+  - a small Linux server in Sydney/Melbourne, with Docker and automatic HTTPS;
+  - about A$10–A$25 a month.
+- **[Internal server](docs/hosting/LOCAL-SERVER.md):**
+  - Ubuntu (Docker or a system service) or Windows (NSSM), inside the company network;
+  - the other sites connect over the WAN/VPN.
+
+Both use the ready-made files in [`deploy/`](deploy/): `docker-compose.yml`, `Caddyfile` and `.env.example`, plus the `Dockerfile` at the top level. Always run **one** copy of the app against a data folder, because it uses a single SQLite file.
+
+## Training
+
+PowerPoint guides for salespeople and sales managers are in [`docs/training/`](docs/training/).
 
 ## Roles and access
 
