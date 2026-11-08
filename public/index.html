@@ -4,62 +4,39 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0B3D91">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Walk-Ins">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
   <title>Sunco Walk-In CRM</title>
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script src="/js/core.js" defer></script>
+  <script src="/js/enquiries.js" defer></script>
+  <script src="/js/reports.js" defer></script>
+  <script src="/js/admin.js" defer></script>
+  <script src="/js/main.js" defer></script>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">S</span><span id="dealer-name">Sunco Motors</span></div>
-    <button id="logout" class="link-button" hidden>Sign out</button>
+    <a class="brand" href="#/today">
+      <img id="brand-logo" alt="" hidden>
+      <span class="brand-mark" id="brand-mark" aria-hidden="true">S</span>
+      <span id="dealer-name">Sunco Motors</span>
+    </a>
+    <div class="topbar-right" id="topbar-right" hidden>
+      <a class="topbar-new" href="#/new">+ New walk-in</a>
+      <a class="user-chip" href="#/account" id="user-chip"></a>
+    </div>
   </header>
-
-  <main id="app" class="container">
-    <section id="view-login" class="card narrow" hidden>
-      <h1>Sign in</h1>
-      <form id="login-form" novalidate>
-        <label>Username or email
-          <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-        </label>
-        <label>Password
-          <input name="password" type="password" autocomplete="current-password" required>
-        </label>
-        <label class="check"><input name="remember" type="checkbox"> Keep me signed in on this device (30 days)</label>
-        <p class="error" role="alert" hidden></p>
-        <button type="submit" class="primary">Sign in</button>
-      </form>
-      <p class="hint">Forgotten your password? Ask your sales manager to reset it.</p>
-    </section>
-
-    <section id="view-password" class="card narrow" hidden>
-      <h1>Set a new password</h1>
-      <p>You're signed in with a temporary password. Choose your own to continue.</p>
-      <form id="password-form" novalidate>
-        <label>Current (temporary) password
-          <input name="current_password" type="password" autocomplete="current-password" required>
-        </label>
-        <label>New password <small>(at least 10 characters)</small>
-          <input name="new_password" type="password" autocomplete="new-password" minlength="10" required>
-        </label>
-        <label>Confirm new password
-          <input name="confirm" type="password" autocomplete="new-password" required>
-        </label>
-        <p class="error" role="alert" hidden></p>
-        <button type="submit" class="primary">Save password</button>
-      </form>
-    </section>
-
-    <section id="view-home" hidden>
-      <div class="card">
-        <h1>Hi <span data-field="first-name"></span></h1>
-        <p class="muted"><span data-field="role"></span></p>
-        <p>The enquiry screens are coming in the next stage of the build. For now you can check that your access is set up correctly.</p>
-      </div>
-      <div class="card">
-        <h2>Your brands and sites</h2>
-        <div id="scope"></div>
-      </div>
-    </section>
-  </main>
+  <div class="shell">
+    <nav class="sidenav" id="nav" aria-label="Main" hidden></nav>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <nav class="tabbar" id="tabbar" aria-label="Main" hidden></nav>
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+  <dialog id="dialog"></dialog>
 </body>
 </html>

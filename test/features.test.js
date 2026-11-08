@@ -246,6 +246,23 @@ describe('email reminders', () => {
   });
 });
 
+describe('privacy requests', () => {
+  test("the GM can blank a customer's details; the enquiry stays", async () => {
+    const e = await enquiry(sam, { customer_name: 'Private Person', email: 'private@example.com' });
+    await sam.post(`/api/enquiries/${e.id}/activities`, { type: 'comment', body: 'Lives at 1 Example St' });
+    assert.equal((await manager.post(`/api/enquiries/${e.id}/remove-personal-details`, { confirm: true })).status, 403);
+    const r = await gm.post(`/api/enquiries/${e.id}/remove-personal-details`, { confirm: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.enquiry.phone, null);
+    assert.equal(r.body.enquiry.email, null);
+    assert.equal(r.body.enquiry.customer_name, 'Removed at customer request');
+    const detail = await gm.get(`/api/enquiries/${e.id}`);
+    assert.ok(!JSON.stringify(detail.body).includes('Example St'));
+    const audit = t.db.prepare("SELECT before_json, after_json FROM audit_log WHERE entity = 'enquiry' AND entity_id = ?").all(e.id);
+    assert.ok(!JSON.stringify(audit).includes('Private Person'));
+  });
+});
+
 describe('team changes', () => {
   test("a manager can move a leaver's open enquiries to someone else", async () => {
     const samId = (await sam.get('/api/auth/me')).body.user.id;

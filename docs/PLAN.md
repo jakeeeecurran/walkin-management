@@ -1,6 +1,6 @@
 # Sunco Motors Walk-In CRM — Project Plan
 
-**Status:** Requirements confirmed. Phase 0 (foundations) is built; phase 1 (core logging screens) is next. Full build, piloted at Caloundra first.
+**Status:** Phases 0–5 are built (see §11). What's left is go-live: hosting, checking the model lists, entering email settings, the Caloundra pilot and training.
 **Goal:** Replace the walk-in tracking Excel workbook (one tab per brand, carried over to a new tab each month) with a small CRM built for Sunco Motors. Sales staff need to use it every day, so it has to be quicker than the spreadsheet.
 
 ---
@@ -315,14 +315,20 @@ Customer details are stored on each enquiry rather than in a separate customers 
 | Phase | Scope | Outcome |
 |---|---|---|
 | **0. Foundations** ✅ built | New data model, migrations, proper auth (no hard-coded secrets/PIN), roles + brand/location scoping enforced server-side, seed brands/models/locations | Secure base to build on |
-| **1. Core logging** (~1–2 weeks) | Today screen, New/Edit Enquiry form with locked-down dropdowns, My Enquiries list, duplicate check, activity history, phone / tablet / desktop layouts | Salespeople can replace the spreadsheet for new walk-ins |
-| **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, email reminders and digests, manager escalation | Nothing falls through the cracks |
-| **3. Reporting** (~1 week) | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
-| **4. Admin & branding** (~1 week) | Full admin screens (brands, models, locations, sales managers, users, lists, branding, settings, audit log, backups & restore) | Self-service changes, no developer needed |
-| **5. Migration & pilot** (~1–2 weeks) | Excel import tool in Admin: upload the workbook, match each tab to its brand + site and each column to a CRM field (pre-filled from the §4 column list), preview with any problem rows flagged (bad dates, unknown models, Sold and Lost both ticked), then import open enquiries + optional history. Unknown models are matched to the model list or flagged for review. Built without a sample, so it's designed to cope with format differences. Then the pilot at **Caloundra** (all 10 Caloundra brands), fixes from feedback | Proven with real users |
+| **1. Core logging** ✅ built | Today screen, New/Edit Enquiry form with locked-down dropdowns, My Enquiries list, duplicate check, activity history, phone / tablet / desktop layouts | Salespeople can replace the spreadsheet for new walk-ins |
+| **2. Follow-ups** ✅ built | Next-follow-up logic, overdue states, quick-action buttons, email reminders and digests, manager escalation | Nothing falls through the cracks |
+| **3. Reporting** ✅ built | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
+| **4. Admin & branding** ✅ built | Full admin screens (brands, models, locations, sales managers, users, lists, branding, settings, audit log, backups & restore) | Self-service changes, no developer needed |
+| **5. Migration & pilot** ✅ import tool built; pilot to run | Excel import tool in Admin: upload the workbook, match each tab to its brand + site and each column to a CRM field (pre-filled from the §4 column list), preview with any problem rows flagged (bad dates, unknown models, Sold and Lost both ticked), then import open enquiries + optional history. Unknown models are matched to the model list or flagged for review. Built without a sample, so it's designed to cope with format differences. Then the pilot at **Caloundra** (all 10 Caloundra brands), fixes from feedback | Proven with real users |
 | **6. Go-live** | Hosting setup, backup + restore test, training, switch on Maroochydore, Kingaroy and Hervey Bay, spreadsheet cut-over date | Whole dealership (all 4 sites, 21 brands) on the CRM |
 
-Timelines are rough working estimates and depend on answers to §12.
+### Built differently from the plan, or not built yet
+- **Postcode → suburb check** (§4) is not built: it needs an Australian postcode dataset. Postcodes are checked for format and range only.
+- **Escalation emails** go in the manager's morning email as a highlighted "Overdue by X+ days" section, not as separate emails.
+- **Backups are not encrypted** by the app. Keep `BACKUP_DIR` on an encrypted disk or a private cloud folder.
+- **Customer removal requests** blank the enquiry's contact details, comments and audit copies straight away. Older backups still hold them until those backups roll off (30 days daily / 12 months monthly).
+- **Live updates between screens** (the old prototype's Socket.IO) were dropped. Lists refresh when you open or change them.
+- **Model variants/trims** are not built (v1 has model only).
 
 ---
 

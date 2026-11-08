@@ -253,6 +253,18 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       where.push('e.entry_month = ?');
       params.push(q.month);
     }
+    if (q.entry_date) {
+      where.push('e.entry_date = ?');
+      params.push(v.isoDate(q.entry_date, 'entry_date'));
+    }
+    if (q.from) {
+      where.push('e.entry_date >= ?');
+      params.push(v.isoDate(q.from, 'from'));
+    }
+    if (q.to) {
+      where.push('e.entry_date <= ?');
+      params.push(v.isoDate(q.to, 'to'));
+    }
     if (q.location_id) {
       where.push('f.location_id = ?');
       params.push(v.id(q.location_id, 'location_id'));
@@ -424,6 +436,23 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     transaction(db, () => {
       addActivity(row.id, req.user.id, type, `${body}. Next follow-up ${next}`, row.next_followup_at);
       db.prepare('UPDATE enquiries SET next_followup_at = ?, updated_at = ? WHERE id = ?').run(next, nowIso(), row.id);
+    });
+    res.json({ enquiry: present(load(row.id), req.user) });
+  });
+
+  // Privacy request: blank the customer's contact details but keep the enquiry for reporting.
+  router.post('/:id/remove-personal-details', (req, res) => {
+    const row = getVisible(req);
+    if (!scope.hasFullAccess(req.user)) throw forbidden('Only the general manager or an admin can do that');
+    if (req.body?.confirm !== true) throw badRequest('Confirmation required');
+    transaction(db, () => {
+      db.prepare("UPDATE enquiries SET customer_name = 'Removed at customer request', phone = NULL, email = NULL, updated_at = ? WHERE id = ?").run(nowIso(), row.id);
+      // Comments may hold personal details too.
+      db.prepare("UPDATE activities SET body = '[removed at customer request]' WHERE enquiry_id = ? AND type IN ('comment', 'call', 'email', 'sms', 'followup_done')").run(row.id);
+      // The audit log's before/after copies hold the same details.
+      db.prepare("UPDATE audit_log SET before_json = NULL, after_json = NULL WHERE entity = 'enquiry' AND entity_id = ?").run(row.id);
+      addActivity(row.id, req.user.id, 'edited', 'Customer contact details and comments removed at customer request');
+      audit(db, { userId: req.user.id, action: 'remove_personal_details', entity: 'enquiry', entityId: row.id });
     });
     res.json({ enquiry: present(load(row.id), req.user) });
   });
