@@ -16,6 +16,7 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
   - On each enquiry: tap to call, SMS or email; log a follow-up and set the next date in one step; mark Sold or Lost (with a reason); comments and a full history.
   - Managers can also reassign, re-open, or mark an enquiry as a duplicate/invalid. Nothing is ever deleted.
 - **Approvals:** when a salesperson marks an enquiry Sold or Lost, it waits for a sales manager who covers that brand and site. The manager approves or declines it with a reason, which is kept in the enquiry's history. Until then it stays open and drops out of the overdue lists. Sales managers and the GM close enquiries directly.
+- **Light or dark:** the sun/moon button at the top switches between light and dark screens, and Account → Appearance offers Match device, Light or Dark. The choice is remembered on each device.
 - **Reports** for a day, a month, year to date or any date range:
   - Conversion (enquiries sold ÷ enquiries), cars sold, and test-drive, trade-in and finance rates, each compared with the previous period.
   - Breakdowns by site, brand, salesperson, model, source, lost reason and postcode.

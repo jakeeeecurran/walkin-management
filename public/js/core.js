@@ -104,6 +104,9 @@
     trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6',
     download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
     arrow: 'M5 12h14M13 6l6 6-6 6',
+    sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41',
+    moon: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z',
+    monitor: 'M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 20h8M12 16v4',
   };
   CRM.icon = function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -119,6 +122,51 @@
     svg.append(p);
     return svg;
   };
+
+  // ---- Light / dark theme ----
+  // 'system' follows the device setting; 'light' and 'dark' are fixed. Remembered on this device.
+  const THEME_KEY = 'sunco-crm-theme';
+  const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  CRM.theme = {
+    get() {
+      try {
+        const v = localStorage.getItem(THEME_KEY);
+        return v === 'light' || v === 'dark' ? v : 'system';
+      } catch {
+        return 'system';
+      }
+    },
+    effective() {
+      const t = CRM.theme.get();
+      return t === 'system' ? (darkQuery && darkQuery.matches ? 'dark' : 'light') : t;
+    },
+    set(mode) {
+      try {
+        if (mode === 'system') localStorage.removeItem(THEME_KEY);
+        else localStorage.setItem(THEME_KEY, mode);
+      } catch {
+        /* storage unavailable: applies until the page is closed */
+      }
+      CRM.theme.apply(mode);
+    },
+    apply(mode = CRM.theme.get()) {
+      const root = document.documentElement;
+      if (mode === 'system') delete root.dataset.theme;
+      else root.dataset.theme = mode;
+      const btn = document.getElementById('theme-btn');
+      if (btn) {
+        const dark = (mode === 'system' ? CRM.theme.effective() : mode) === 'dark';
+        btn.replaceChildren(CRM.icon(dark ? 'sun' : 'moon'));
+        btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+        btn.title = dark ? 'Light mode' : 'Dark mode';
+      }
+      document.dispatchEvent(new CustomEvent('themechange'));
+    },
+    toggle() {
+      CRM.theme.set(CRM.theme.effective() === 'dark' ? 'light' : 'dark');
+    },
+  };
+  if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', () => CRM.theme.get() === 'system' && CRM.theme.apply());
 
   // ---- Formatting ----
   const TZ = 'Australia/Brisbane';

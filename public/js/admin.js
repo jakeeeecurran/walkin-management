@@ -830,9 +830,19 @@
       h('div', null, h('button', { type: 'submit', class: 'btn-primary' }, 'Change password'))
     );
     const scope = me.full_access ? 'All brands at all sites' : me.franchises.map((f) => `${f.brand} – ${f.location}`).join(', ') || 'None yet';
+    const themeSeg = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Appearance' });
+    const drawTheme = () =>
+      themeSeg.replaceChildren(
+        ...[['system', 'Match device', 'monitor'], ['light', 'Light', 'sun'], ['dark', 'Dark', 'moon']].map(([v, l, ic]) =>
+          h('button', { type: 'button', 'aria-pressed': String(CRM.theme.get() === v), onclick: () => { CRM.theme.set(v); drawTheme(); } }, CRM.icon(ic), l)
+        )
+      );
+    drawTheme();
+    const appearance = h('section', { class: 'card stack' }, h('h2', { style: { margin: 0 } }, 'Appearance'), h('p', { class: 'muted small', style: { margin: 0 } }, 'Light or dark screens on this device. You can also switch with the sun/moon button at the top.'), themeSeg);
     main.replaceChildren(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, me.name), h('p', { class: 'muted' }, `${CRM.ROLE[me.role]}${me.is_admin ? ' · Admin' : ''} · ${me.username}`)), h('button', { onclick: () => CRM.logout() }, 'Sign out')),
       h('section', { class: 'card' }, h('h2', null, 'Your brands and sites'), h('p', null, scope)),
+      appearance,
       h('div', { class: 'grid-2' }, prefs, pw)
     );
   });

@@ -26,7 +26,11 @@
     }
   };
 
+  CRM.theme.apply();
+  document.getElementById('theme-btn').addEventListener('click', () => CRM.theme.toggle());
+
   function setChrome(signedIn) {
+    document.getElementById('user-chip').hidden = !signedIn;
     document.getElementById('nav').hidden = !signedIn;
     document.getElementById('tabbar').hidden = !signedIn;
     document.getElementById('topbar-right').hidden = !signedIn;

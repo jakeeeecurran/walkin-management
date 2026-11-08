@@ -3,6 +3,8 @@
   --primary: #d81e05;
   --primary-ink: #ffffff;
   --primary-text: var(--primary);
+  --pending-ink: #8a4a00;
+  --on-status: #ffffff;
   --primary-soft: color-mix(in srgb, var(--primary) 9%, #ffffff);
   --primary-line: color-mix(in srgb, var(--primary) 30%, #ffffff);
   --accent: #f7a21b;
@@ -36,6 +38,8 @@
   :root:not([data-theme="light"]) {
     --primary-ink: #ffffff;
     --primary-text: color-mix(in srgb, var(--primary) 45%, #ffffff);
+    --pending-ink: #f6c46e;
+    --on-status: #0b1220;
     --primary-soft: color-mix(in srgb, var(--primary) 22%, #111827);
     --primary-line: color-mix(in srgb, var(--primary) 55%, #111827);
     --bg: #0b0f17; --surface: #121823; --surface-2: #161d2a; --surface-3: #1b2331;
@@ -48,6 +52,8 @@
 :root[data-theme="dark"] {
   --primary-ink: #ffffff;
   --primary-text: color-mix(in srgb, var(--primary) 45%, #ffffff);
+  --pending-ink: #f6c46e;
+  --on-status: #0b1220;
   --primary-soft: color-mix(in srgb, var(--primary) 22%, #111827);
   --primary-line: color-mix(in srgb, var(--primary) 55%, #111827);
   --bg: #0b0f17; --surface: #121823; --surface-2: #161d2a; --surface-3: #1b2331;
@@ -171,7 +177,7 @@ button svg, .btn svg { width: 18px; height: 18px; flex: none; }
 .btn-primary:hover { background: var(--primary); filter: brightness(1.1); }
 .btn-accent { background: var(--primary); border-color: var(--primary-text); color: var(--primary-ink); }
 .btn-accent:hover { background: var(--primary); filter: brightness(1.1); }
-.btn-good { background: var(--good); border-color: var(--good); color: #fff; }
+.btn-good { background: var(--good); border-color: var(--good); color: var(--on-status); }
 .btn-good:hover { background: var(--good); filter: brightness(1.08); }
 .btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--surface)); }
 .btn-danger:hover { background: var(--danger-soft); }
@@ -233,8 +239,8 @@ details summary { cursor: pointer; font-weight: 600; color: var(--primary-text);
 .segmented button { border: 0; min-height: 42px; background: transparent; border-radius: 9px; color: var(--text-2); }
 .segmented button:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--primary-text); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }
-.segmented button[data-value="sold"][aria-pressed="true"] { background: var(--good); color: #fff; }
-.segmented button[data-value="lost"][aria-pressed="true"] { background: var(--danger); color: #fff; }
+.segmented button[data-value="sold"][aria-pressed="true"] { background: var(--good); color: var(--on-status); }
+.segmented button[data-value="lost"][aria-pressed="true"] { background: var(--danger); color: var(--on-status); }
 
 /* Badges */
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 650; white-space: nowrap; line-height: 1.4; }
@@ -555,10 +561,10 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 .primary-actions .btn-log { grid-column: 1 / -1; }
 
 /* ---------- Approvals ---------- */
-.badge-pending { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: color-mix(in srgb, var(--accent) 45%, #5a3200); }
+.badge-pending { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--pending-ink); }
 .approval { margin: 0 0 12px; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .approval-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.approval-head svg { width: 18px; height: 18px; color: color-mix(in srgb, var(--accent) 45%, #5a3200); flex: none; }
+.approval-head svg { width: 18px; height: 18px; color: var(--pending-ink); flex: none; }
 .approval p { margin: 0 0 10px; color: var(--text-2); font-size: 0.92rem; }
 .approval .approval-note { font-style: italic; }
 .approval .btn-row { gap: 8px; }
@@ -566,3 +572,9 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 .primary-actions.solo { grid-template-columns: minmax(0, 1fr) 48px; }
 .primary-actions.solo .btn-log { grid-column: auto; }
 .approvals-card .card { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+
+/* ---------- Light / dark switch ---------- */
+.theme-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); flex: none; }
+.theme-btn:hover { background: var(--surface-3); }
+.theme-btn svg { width: 19px; height: 19px; }
+.topbar-tools { display: flex; align-items: center; gap: 10px; }

@@ -13,7 +13,7 @@ const body = html
   .replace(/<script[\s\S]*?<\/script>/g, '')
   .trim();
 const safe = (js) => js.replace(/<\/(script)/gi, '<\\/$1');
-const scripts = ['public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/main.js'];
+const scripts = ['public/js/theme-boot.js', 'public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/main.js'];
 // Sunco branding (the logo is embedded, as the trial page can't load other files) and a few
 // sold/lost requests waiting for approval, so the approval step can be tried straight away.
 const demo = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
