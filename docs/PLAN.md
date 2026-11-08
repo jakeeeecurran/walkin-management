@@ -10,8 +10,8 @@
 These decide every design trade-off below. If a feature works against them, it gets cut or simplified.
 
 1. **An enquiry takes under 30 seconds to log, on a phone.** If it's slower than typing into Excel, people will stop using it.
-2. **Pick from a list instead of typing.** Brand, model, source, status, lost reason and salesperson are all dropdowns that admins manage. Free text is limited to the customer's name, phone, email and notes.
-3. **The system fills in what it already knows.** Date, time, salesperson (the logged-in user), location, and the brand if the user only sells one brand.
+2. **Pick from a list instead of typing.** Brand, department, model, outcome and lost reason are all dropdowns or toggles that admins manage. Free text is limited to the customer's name, postcode, phone, email and comments, and each of those is validated.
+3. **The system fills in what it already knows.** Date of entry, month, salesperson (the logged-in user), department, and the brand if the user only sells one brand.
 4. **Everyone sees only what they need.** A salesperson sees their own enquiries for their own brands and locations. Managers see their team. The GM sees everything.
 5. **No month-end carry-over.** All enquiries live in one list. "This month" and "previous months" are filters, so open enquiries never get lost between tabs.
 6. **Admins change settings, not developers.** Brands, models, users, roles, locations, colours and logo are all edited in the Admin screen.
@@ -49,7 +49,9 @@ The repo already has a working prototype (`server.js` + `public/index.html`): No
 | Delete enquiry | ❌ | ❌ (can mark "Duplicate/Invalid") | ✅ | ✅ |
 | Daily / monthly / yearly reports | Own figures | Team + per-salesperson | Whole dealership | All |
 | Export to CSV/Excel | ❌ | ✅ own scope | ✅ | ✅ |
-| Manage users and privileges | ❌ | Add/disable salespeople in own brands (optional) | ✅ | ✅ |
+| Add / remove sales managers and assign their brands | ❌ | ❌ | ✅ | ✅ |
+| Add / remove salespeople | ❌ | ✅ in own brands/site | ✅ | ✅ |
+| Change anyone's role or privileges | ❌ | ❌ | ✅ | ✅ |
 | Manage brands, models, locations, lists | ❌ | Models for own brands (optional) | ✅ | ✅ |
 | Branding / colours / logo | ❌ | ❌ | ✅ | ✅ |
 
@@ -63,7 +65,7 @@ Sunco has **four locations: Caloundra, Maroochydore, Kingaroy and Hervey Bay**, 
 - Each user is assigned to **specific franchises**, not to brands and locations separately. That stops a Caloundra MG salesperson from automatically seeing Hervey Bay MG enquiries. It also covers someone who sells MG at Caloundra and LDV at Maroochydore.
 - Shortcuts in Admin: "all brands at Kingaroy" (e.g. a site manager) or "Hyundai at every location" (e.g. a brand manager).
 - **Salesperson:** sees only enquiries assigned to them, within their franchises.
-- **Sales Manager:** sees every enquiry in their franchises (e.g. one site, or one brand across sites).
+- **Sales Manager:** sees every enquiry in their franchises (e.g. one site, or one brand across sites). Starting assumption: **at least one sales manager per site**, with more added at any time. Two managers can share a site (e.g. one for Hyundai/Nissan and one for MG/LDV/Chery at Caloundra), and one manager can cover brands at more than one site.
 - **General Manager:** sees all four locations.
 - This is enforced **on the server** for every request and every live update, not just hidden in the UI.
 - On the enquiry form, the **location** defaults to the user's site, and the **brand** dropdown shows only brands sold at that location *and* assigned to the user.
@@ -76,26 +78,44 @@ Sunco has **four locations: Caloundra, Maroochydore, Kingaroy and Hervey Bay**, 
 
 ---
 
-## 4. Keeping data consistent
+## 4. Enquiry fields and keeping data consistent
 
 This is the most important part for usefulness. Reports are only as good as the data going in.
 
-| Field | How it's controlled |
-|---|---|
-| **Brand** | Dropdown, limited to the user's assigned brands. Auto-selected if they have only one. |
-| **Model** | Dropdown filtered by the chosen brand. Managed per brand in Admin. Models can be marked **inactive** (hidden from new entries, kept on old ones for reporting). |
-| **Variant / trim** (optional) | Optional second dropdown under model, e.g. "MG ZS → Excite / Essence". |
-| **Used cars** | Treated as a brand. Model is replaced by **Make** (dropdown) + **Model** (short text or picked from a list) + optional stock number. |
-| **Source** | Dropdown: Walk-in, Phone, Web lead, Referral, Repeat customer, Other. Admin-managed. |
-| **Status** | Fixed pipeline: New → Contacted → Test drive → Negotiating → Sold / Lost. |
-| **Lost reason** | Required when status = Lost. Dropdown: Price, Finance declined, Bought elsewhere, Not ready, No stock, No contact, Other (+ note). |
-| **Next follow-up date** | Required while an enquiry is open. Defaults to tomorrow with one-tap options (+1d, +3d, +1w). |
-| **Phone** | Formatted and validated as an Australian mobile/landline. |
-| **Email** | Format check. Optional. |
-| **Duplicate check** | When a phone number or email is entered, warn if an open enquiry already exists for that customer and show who owns it. |
-| **Trade-in / finance** | Yes/No toggles (cheap to capture, useful in reports). |
+### Fields (matching the current spreadsheet columns)
 
-Admins can add, rename, reorder and deactivate every dropdown list. Values are stored by ID, so renaming "Leapmotor C10" to "Leapmotor C10 Design" updates every report without breaking history.
+| # | Spreadsheet column | In the CRM | How it's entered / controlled |
+|---|---|---|---|
+| 1 | Date of entry | **Date of entry** | Filled in automatically (today's date and time). Managers can back-date if needed. |
+| 2 | Current month of the enquiry | **Month** | Worked out automatically from the date. Nobody types it, and there's no carry-over tab: open enquiries simply stay open until sold or lost. |
+| 3 | Brand | **Brand** | Dropdown, limited to brands sold at the chosen site and assigned to the user. Auto-selected if there's only one. |
+| 4 | Department (e.g. Caloundra, Kingaroy) | **Department / location** | Dropdown of the 4 sites. Defaults to the user's home site. Locked if the user only works at one site. |
+| 5 | Customer name | **Customer name** | Text, required. Auto-capitalised ("john smith" → "John Smith"). |
+| 6 | Customer postcode | **Postcode** | 4-digit Australian postcode, numbers only, checked for a valid QLD/AU range. Shows the suburb name as a check (e.g. 4551 → Caloundra). |
+| 7 | Phone number | **Phone** | Validated and formatted as an Australian mobile/landline (`0412 345 678`). Phone *or* email required. |
+| 8 | Email address | **Email** | Format check. Optional if a phone number is given. |
+| 9 | Test drove? | **Test drive** | Yes/No toggle. Default No. |
+| 10 | Has a trade? | **Trade-in** | Yes/No toggle. Default No. |
+| 11 | Financing? | **Finance** | Yes/No toggle. Default No. |
+| 12 | Lost enquiry? | **Outcome = Lost** | See *Outcome* below. Requires a lost reason. |
+| 13 | Comments | **Comments** | Free text. Each comment is saved with the date and who wrote it, so the history builds up instead of being overwritten. |
+| 14 | Sold? | **Outcome = Sold** | See *Outcome* below. Records the sale date. |
+
+**Outcome:** the spreadsheet's separate "Lost" and "Sold" columns become one field with three options: **Open → Sold** or **Open → Lost**. That makes it impossible to tick both, or neither, by mistake.
+
+### Extra fields the CRM adds (kept to a minimum)
+
+| Field | Why | How |
+|---|---|---|
+| **Salesperson** | Needed for permissions, follow-ups and per-person conversion | Automatically the logged-in user. Managers can reassign. |
+| **Model** | Stops over-typing and gives "most-enquired models" reports | Dropdown filtered by brand, managed per brand in Admin. Old models can be retired (hidden from new entries, kept on old ones). For **Used Cars**: make (dropdown) + model + optional stock number. |
+| **Next follow-up date** | Drives the reminders | Required while the enquiry is Open. Defaults to tomorrow with one-tap +1 day / +3 days / +1 week. |
+| **Lost reason** | Shows *why* enquiries are lost | Required when Outcome = Lost. Dropdown: Price, Finance declined, Bought elsewhere, Not ready, No stock, No contact, Other. |
+| **Source** (optional) | Walk-in vs phone vs web | Dropdown, defaults to Walk-in. Can be switched off in Admin if not wanted. |
+
+### Other safeguards
+- **Duplicate check:** when a phone number or email is entered, warn if an open enquiry already exists for that customer and show who owns it.
+- **Admin-managed lists:** admins can add, rename, reorder and retire every dropdown (brands, models, lost reasons, sources). Values are stored by ID, so renaming a model updates every report without breaking history.
 
 ---
 
@@ -107,8 +127,8 @@ Admins can add, rename, reorder and deactivate every dropdown list. Values are s
    - Large **"+ New Walk-In"** button.
    - **Follow-ups due today** and **overdue** (red), each with tap-to-call / tap-to-SMS / "Done, next follow-up in…".
    - Today's enquiries.
-2. **New / Edit Enquiry**: one short form. Required fields: customer name, phone *or* email, brand, model, source, next follow-up. Everything else is optional or defaulted. Large touch targets, works one-handed on a phone.
-3. **My Enquiries**: searchable list (name, phone, model) with filter chips (Open, This month, Overdue, Sold, Lost).
+2. **New / Edit Enquiry**: one short form. Required fields: customer name, postcode, phone *or* email, brand, model, next follow-up. Date, month, department and salesperson are filled in automatically, and the test drive / trade / finance toggles default to No. Large touch targets, works one-handed on a phone.
+3. **My Enquiries**: searchable list (name, phone, model) with filter chips (Open, This month, Overdue, Sold, Lost, Test drove, Trade, Finance).
 
 ### Design decisions that help adoption
 
@@ -154,7 +174,9 @@ All reports respect the user's scope (a salesperson sees their own, a manager se
 ### Month-to-date and year-to-date
 - **Enquiries**, **test drives**, **sales**, and **lost**, broken down by location, brand, salesperson, source and model.
 - **Location comparison** (GM view): the four sites side by side, and the same brand compared across sites.
-- **Conversion rate** = sold ÷ enquiries (definition agreed with management, see §10). Shown for the month and the year, with the same period last month/year for comparison.
+- **Conversion rate = enquiries sold ÷ enquiries.** Example: a salesperson with 60 enquiries who has sold 20 of them has a **33% conversion rate**. Shown per salesperson, sales manager team, brand, location and the whole dealership, for the month and the year, compared with the same period last month/year.
+- **Test drive, trade-in and finance rates:** the % of enquiries with each ticked, plus conversion for test-drive vs no-test-drive enquiries.
+- **Postcode map/table:** where customers come from, by site and brand (useful for marketing).
 - **Test-drive rate** and **test-drive → sale rate**.
 - **Lost reasons** breakdown.
 - **Follow-up compliance**: % of follow-ups done on time, per salesperson.
@@ -195,6 +217,7 @@ The app is built once and can run in either of these setups. Only configuration 
 - **Brands:** add, rename, reorder, deactivate. Each brand has its models (and optional variants).
 - **Locations:** add, rename, deactivate sites.
 - **Franchises:** a location × brand grid. Tick which brands are sold at each location. Turning one off hides it from new enquiries and keeps its history.
+- **Sales managers:** add or remove sales managers, choose their site(s) and tick the brands they manage. Removing a manager doesn't delete anything: their salespeople and enquiries stay, and can be moved to another manager.
 - **Users:** add/disable, set role, set home location, assign franchises (with "whole location" / "whole brand" shortcuts), reset password, reassign all of a departing salesperson's open enquiries in one action.
 - **Lists:** sources, lost reasons, status labels (labels only; the pipeline logic stays fixed).
 - **Settings:** follow-up escalation days, stale-enquiry days, daily email send time, time zone.
@@ -236,10 +259,10 @@ franchises     (id, location_id, brand_id, active)          -- which brands each
 users          += home_location_id
 user_franchises(user_id, franchise_id)                      -- what each user can see/log
 lookup_values  (id, list_type[source|lost_reason], label, sort_order, active)
-customers      (id, name, phone, email, created_at)        -- enables duplicate detection
+customers      (id, name, postcode, phone, email, created_at)        -- enables duplicate detection
 enquiries      (id, customer_id, franchise_id, model_id, variant_id,
-                salesperson_id, source_id, status, lost_reason_id,
-                test_drive, trade_in, finance, next_followup_at,
+                salesperson_id, source_id, lost_reason_id,
+                test_drive, trade_in, finance, outcome[open|sold|lost], sold_at, next_followup_at,
                 created_at, closed_at, created_by)
 activities     (id, enquiry_id, user_id, type[note|call|sms|status_change|followup_done],
                 body, created_at)
@@ -247,7 +270,7 @@ settings       (key, value)                                 -- branding, thresho
 audit_log      (id, user_id, action, entity, entity_id, before, after, created_at)
 ```
 
-**Decisions needed (see §12):** what counts as a "conversion" (sold ÷ all enquiries, or ÷ enquiries with a test drive?), and whether a sale is counted in the month the enquiry came in or the month it sold. Recommendation: show **both** "sold this month" (by sale date) and "conversion of this month's enquiries" (by enquiry date).
+**Conversion (agreed):** enquiries sold ÷ enquiries. For a month, it's counted against the enquiries **entered that month** (so October's figure keeps rising if October enquiries sell in November). A separate **"cars sold this month"** count, by sale date, is shown next to it so month-end sales totals still line up.
 
 ---
 
@@ -270,11 +293,11 @@ Timelines are rough working estimates and depend on answers to §12.
 ## 12. Questions to answer before building
 
 1. **Locations and brands:** ✅ Confirmed. 4 locations, 21 brands, 33 brand-location combinations (see §9).
-2. **People:** roughly how many salespeople and managers? Do any salespeople sell more than one brand? Do managers cover several brands?
+2. **People:** ✅ Assume at least one sales manager per site; more can be added in Admin with their own brands. Exact numbers not needed yet.
 3. **Hosting:** do staff need access from outside the dealership (home, other sites)? Does Sunco use **Google Workspace** (for Google sign-in) or Microsoft 365?
 4. **Devices:** will staff mostly use their phones, desk PCs or showroom tablets?
-5. **Spreadsheet columns:** please share a copy of the current workbook (customer details can be removed). We need the exact columns to match and to build the import.
-6. **Conversion definition:** sold ÷ enquiries, or sold ÷ test drives? Counted by enquiry month or sale month? (We can show both.)
+5. **Spreadsheet columns:** ✅ Confirmed (see §4). A sample copy with customer details removed would still help when building the import, to check the date and Yes/No formats.
+6. **Conversion definition:** ✅ Enquiries sold ÷ enquiries (e.g. 20 sold from 60 = 33%), counted against the month the enquiry was entered (see §10).
 7. **Used cars:** do you want to link to a stock number/stock list, or just make + model?
 8. **Notifications:** email, phone push, or both? Should managers get a daily end-of-day email automatically?
 9. **Rollout scope:** all 21 brands are set up from day one. Should the pilot and first rollout cover only the Caloundra brands you manage directly (Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars), with the other sites' managers brought on afterwards?
