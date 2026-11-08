@@ -7,7 +7,7 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
 
 - **Today screen:** a big "New walk-in" button, overdue follow-ups, follow-ups due today and today's walk-ins.
 - **New walk-in form**, built for a phone in the showroom:
-  - Brand and model are picked from lists, never typed. Used cars take a make, a model and an optional stock number.
+  - Brand and model are picked from lists, never typed. Used cars: just type the make and model (suggestions appear; small typos like "hodna" are matched to Honda and new makes are added automatically), plus an optional stock number.
   - Date, month, salesperson and site fill in automatically. Postcode and phone are checked and tidied.
   - Possible duplicates are flagged as the phone number or email is entered.
 - **Enquiries:**

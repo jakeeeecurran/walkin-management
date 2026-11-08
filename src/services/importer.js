@@ -6,6 +6,7 @@ const v = require('../lib/validate');
 const { monthOf, localDate, nowIso } = require('../lib/time');
 const { getSetting } = require('../lib/settings');
 const { transaction } = require('../db');
+const { norm, fuzzyFind } = require('../lib/fuzzy');
 
 const FIELDS = {
   entry_date: { label: 'Date of entry', match: /\bdate\b|entry/i },
@@ -40,38 +41,6 @@ function cellValue(c) {
     return null;
   }
   return c;
-}
-
-const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-function distance(a, b) {
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i++)
-    for (let j = 1; j <= b.length; j++)
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return dp[a.length][b.length];
-}
-
-// Finds the closest name in a list, allowing small misspellings ("Calandra" -> Caloundra).
-function fuzzyFind(list, raw, nameKey = 'name') {
-  const target = norm(raw);
-  if (!target) return null;
-  const aliases = { used: 'usedcars', usedcar: 'usedcars', cherry: 'chery', greatwall: 'gwm', haval: 'gwm' };
-  const t = aliases[target] || target;
-  let best = null;
-  let bestScore = Infinity;
-  for (const item of list) {
-    const n = norm(item[nameKey]);
-    if (n === t) return item;
-    const score = n.startsWith(t) || t.startsWith(n) ? 1 : distance(n, t);
-    if (score < bestScore) {
-      bestScore = score;
-      best = item;
-    }
-  }
-  const allowed = Math.max(1, Math.floor(t.length / 3));
-  return bestScore <= allowed ? best : null;
 }
 
 function yes(value) {

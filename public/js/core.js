@@ -93,6 +93,17 @@
     inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1Z',
     check: 'M20 6 9 17l-5-5',
     shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z',
+    chevron: 'm6 9 6 6 6-6',
+    filter: 'M3 6h18M6 12h12M10 18h4',
+    dots: 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
+    x: 'M18 6 6 18M6 6l12 12',
+    edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+    swap: 'M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
+    undo: 'M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13',
+    ban: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM4.9 4.9l14.2 14.2',
+    trash: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6',
+    download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+    arrow: 'M5 12h14M13 6l6 6-6 6',
   };
   CRM.icon = function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -212,6 +223,92 @@
       });
       el.addEventListener('close', () => answered || resolve(false), { once: true });
     });
+
+  // ---- Dropdown menus ----
+  // CRM.menu(anchorEl, [{ label, hint, icon, danger, checked, onSelect }|'divider'], { align: 'left'|'right' })
+  let openMenu = null;
+  function closeMenu() {
+    if (!openMenu) return;
+    openMenu.el.remove();
+    openMenu.anchor.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', openMenu.outside, true);
+    document.removeEventListener('keydown', openMenu.keys, true);
+    window.removeEventListener('resize', closeMenu);
+    window.removeEventListener('scroll', openMenu.scroll, true);
+    const a = openMenu.anchor;
+    openMenu = null;
+    return a;
+  }
+  CRM.closeMenu = closeMenu;
+  CRM.menu = function menu(anchor, items, { align = 'left', width } = {}) {
+    if (openMenu && openMenu.anchor === anchor) return closeMenu();
+    closeMenu();
+    const el = h(
+      'div',
+      { class: 'menu', role: 'menu', style: width ? { minWidth: `${width}px` } : null },
+      items.filter(Boolean).map((it) =>
+        it === 'divider'
+          ? h('div', { class: 'menu-divider', role: 'separator' })
+          : h(
+              'button',
+              {
+                type: 'button',
+                role: it.checked !== undefined ? 'menuitemradio' : 'menuitem',
+                'aria-checked': it.checked !== undefined ? String(!!it.checked) : null,
+                class: ['menu-item', it.danger && 'danger', it.checked && 'checked'],
+                onclick: () => { closeMenu(); it.onSelect?.(); },
+              },
+              it.icon ? CRM.icon(it.icon) : null,
+              h('span', { class: 'menu-label' }, it.label, it.hint ? h('small', null, it.hint) : null),
+              it.checked ? h('span', { class: 'menu-check', 'aria-hidden': 'true' }, CRM.icon('check')) : null
+            )
+      )
+    );
+    document.body.append(el);
+    const r = anchor.getBoundingClientRect();
+    const mw = el.offsetWidth;
+    const left = align === 'right' ? r.right - mw : r.left;
+    el.style.left = `${Math.max(8, Math.min(left, window.innerWidth - mw - 8))}px`;
+    const below = r.bottom + 6;
+    const fitsBelow = below + el.offsetHeight < window.innerHeight - 8;
+    el.style.top = `${fitsBelow ? below : Math.max(8, r.top - el.offsetHeight - 6)}px`;
+    anchor.setAttribute('aria-expanded', 'true');
+    const buttons = [...el.querySelectorAll('.menu-item')];
+    (buttons.find((b) => b.classList.contains('checked')) || buttons[0])?.focus();
+    const outside = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closeMenu(); };
+    const keys = (e) => {
+      const i = buttons.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu()?.focus(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); buttons[(i + 1) % buttons.length]?.focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); buttons[(i - 1 + buttons.length) % buttons.length]?.focus(); }
+      else if (e.key === 'Tab') closeMenu();
+    };
+    const scroll = (e) => { if (!el.contains(e.target)) closeMenu(); };
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', keys, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', scroll, true);
+    openMenu = { el, anchor, outside, keys, scroll };
+  };
+  window.addEventListener('hashchange', closeMenu);
+
+  // A button that looks like a select and opens a menu of options.
+  // options: [{ value, label, hint }]
+  CRM.dropdown = function dropdown({ options, value, onChange, label, prefix, icon, align }) {
+    const current = () => options.find((o) => String(o.value) === String(value)) || options[0];
+    const btn = h('button', { type: 'button', class: 'dropdown', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': label || null });
+    const draw = () =>
+      btn.replaceChildren(icon ? CRM.icon(icon) : null, prefix ? h('span', { class: 'dropdown-prefix' }, prefix) : null, h('span', { class: 'dropdown-value' }, current().label), CRM.icon('chevron'));
+    draw();
+    btn.addEventListener('click', () =>
+      CRM.menu(
+        btn,
+        options.map((o) => ({ label: o.label, hint: o.hint, checked: String(o.value) === String(value), onSelect: () => { value = o.value; draw(); onChange(o.value); } })),
+        { align, width: btn.offsetWidth }
+      )
+    );
+    return btn;
+  };
 
   // ---- Form error display ----
   CRM.clearErrors = (root) => {

@@ -5,13 +5,14 @@ const { audit } = require('../lib/audit');
 const { notFound, forbidden, badRequest } = require('../lib/http');
 const { localDate, addDays, monthOf, nowIso } = require('../lib/time');
 const { transaction } = require('../db');
+const { fuzzyFind, tidyName } = require('../lib/fuzzy');
 
 const OUTCOMES = ['open', 'sold', 'lost'];
 
 // Fields stored on the enquiry that the API accepts.
 const EDITABLE = [
   'location_id', 'brand_id', 'salesperson_id', 'customer_name', 'postcode', 'phone', 'email',
-  'model_id', 'used_make_id', 'used_model_id', 'used_extra_model_id', 'used_model_other', 'stock_number',
+  'model_id', 'used_make_id', 'used_model_id', 'used_extra_model_id', 'used_model_other', 'stock_number', 'used_make', 'used_model',
   'source_id', 'test_drive', 'trade_in', 'finance', 'outcome', 'lost_reason_id', 'next_followup_at', 'entry_date',
 ];
 
@@ -125,6 +126,7 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     const unchanged = (k, value) => !isNew && existing[k] === value; // retired list items may stay on old enquiries
     rec.model_id = rec.used_make_id = rec.used_model_id = rec.used_extra_model_id = rec.used_model_other = rec.stock_number = null;
     if (franchise.is_used) {
+      resolveTypedUsedVehicle(input);
       const makeId = v.id(pick('used_make_id', existing?.used_make_id), 'used_make_id', { required: true });
       const make = db.prepare('SELECT * FROM used_makes WHERE id = ?').get(makeId);
       if (!make || (!make.active && !unchanged('used_make_id', makeId))) throw new v.ValidationError('used_make_id', 'Choose a make from the list');
@@ -134,7 +136,7 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
       const extraId = v.id(pick('used_extra_model_id', existing?.used_extra_model_id), 'used_extra_model_id');
       const other = v.text(pick('used_model_other', existing?.used_model_other), 'used_model_other', { max: 60 });
       if ([linkedId, extraId, other].filter((x) => x != null).length !== 1) {
-        throw new v.ValidationError('used_model_id', 'Choose one model (or "Other" with a short description)');
+        throw new v.ValidationError('used_model_id', 'Enter the model');
       }
       if (linkedId) {
         const m = db.prepare('SELECT * FROM models WHERE id = ?').get(linkedId);
@@ -220,6 +222,45 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     rec.entry_month = monthOf(entryDate);
 
     return rec;
+  }
+
+  // Used cars: the make and model are typed freely ("honda", "civic"). They're matched to the
+  // existing lists, allowing small typos; anything new is added to the lists so reports stay tidy.
+  // Runs inside the save transaction, so a failed save adds nothing.
+  function resolveTypedUsedVehicle(input) {
+    if (input.used_make === undefined && input.used_model === undefined) return;
+    if (input.used_make !== undefined) {
+      const typed = v.text(input.used_make, 'used_make_id', { required: true, max: 40 });
+      const makes = db.prepare('SELECT * FROM used_makes').all();
+      let make = fuzzyFind(makes, typed);
+      if (!make) {
+        const name = tidyName(typed);
+        const id = Number(db.prepare('INSERT INTO used_makes (name, sort_order) VALUES (?, 0)').run(name).lastInsertRowid);
+        make = db.prepare('SELECT * FROM used_makes WHERE id = ?').get(id);
+      } else if (!make.active) {
+        db.prepare('UPDATE used_makes SET active = 1 WHERE id = ?').run(make.id);
+      }
+      input.used_make_id = make.id;
+    }
+    const makeId = input.used_make_id;
+    const make = makeId ? db.prepare('SELECT * FROM used_makes WHERE id = ?').get(makeId) : null;
+    if (input.used_model !== undefined && make) {
+      const typed = v.text(input.used_model, 'used_model_id', { required: true, max: 60 });
+      input.used_model_id = null;
+      input.used_extra_model_id = null;
+      input.used_model_other = null;
+      const linked = make.brand_id ? db.prepare('SELECT * FROM models WHERE brand_id = ?').all(make.brand_id) : [];
+      const extra = db.prepare('SELECT * FROM used_models WHERE make_id = ?').all(make.id);
+      const hitLinked = fuzzyFind(linked, typed, 'name', { prefix: false });
+      const hitExtra = hitLinked ? null : fuzzyFind(extra, typed, 'name', { prefix: false });
+      if (hitLinked) input.used_model_id = hitLinked.id;
+      else if (hitExtra) {
+        if (!hitExtra.active) db.prepare('UPDATE used_models SET active = 1 WHERE id = ?').run(hitExtra.id);
+        input.used_extra_model_id = hitExtra.id;
+      } else {
+        input.used_extra_model_id = Number(db.prepare('INSERT INTO used_models (make_id, name) VALUES (?, ?)').run(make.id, tidyName(typed)).lastInsertRowid);
+      }
+    }
   }
 
   function describeChanges(before, after) {
@@ -361,9 +402,9 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
   router.post('/', (req, res) => {
     const user = req.user;
     const input = pickInput(req.body);
-    const rec = build(user, input, null);
     const comment = v.multilineText(req.body?.comment, 'comment');
     const id = transaction(db, () => {
+      const rec = build(user, input, null);
       const cols = Object.keys(rec);
       const newId = Number(
         db
@@ -383,11 +424,11 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     const existing = getVisible(req);
     if (!scope.canEditEnquiry(db, user, existing)) throw forbidden();
     const input = pickInput(req.body);
-    const rec = build(user, input, existing);
     const comment = v.multilineText(req.body?.comment, 'comment');
-    const before = Object.fromEntries(Object.keys(rec).map((k) => [k, existing[k]]));
 
     transaction(db, () => {
+      const rec = build(user, input, existing);
+      const before = Object.fromEntries(Object.keys(rec).map((k) => [k, existing[k]]));
       const cols = Object.keys(rec);
       db.prepare(`UPDATE enquiries SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(
         ...cols.map((c) => rec[c]),

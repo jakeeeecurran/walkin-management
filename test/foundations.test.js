@@ -257,6 +257,29 @@ describe('permissions by brand and site', () => {
     assert.equal(found.body.total, 1);
   });
 
+  test('used car make and model can be typed; typos match existing names and new ones are added', async () => {
+    const used = { brand_id: t.ids.brand('Used Cars'), model_id: undefined };
+    const a = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: '0455000001', used_make: 'hodna', used_model: 'civic', stock_number: 'u777' }));
+    assert.equal(a.status, 201, JSON.stringify(a.body));
+    assert.equal(a.body.enquiry.vehicle, 'Honda Civic');
+    const b = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: '0455000002', used_make: 'toyota', used_model: 'rav4' }));
+    assert.equal(b.body.enquiry.vehicle, 'Toyota RAV4');
+    const c = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: '0455000003', used_make: 'cupra', used_model: 'formentor' }));
+    assert.equal(c.status, 201);
+    assert.equal(c.body.enquiry.vehicle, 'Cupra Formentor');
+    assert.ok(t.db.prepare("SELECT 1 FROM used_makes WHERE name = 'Cupra'").get());
+    const again = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: '0455000004', used_make: 'Cupra', used_model: 'Formentor' }));
+    assert.equal(again.body.enquiry.used_make_id, c.body.enquiry.used_make_id);
+    assert.equal(t.db.prepare("SELECT COUNT(*) AS n FROM used_models WHERE name = 'Formentor'").get().n, 1);
+    const noModel = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: '0455000005', used_make: 'Mazda' }));
+    assert.equal(noModel.status, 400);
+    assert.equal(noModel.body.field, 'used_model_id');
+    // A failed save doesn't leave a new make behind.
+    const bad = await alice.post('/api/enquiries', newEnquiry({ ...used, phone: 'nope', used_make: 'Zzyzx Motors', used_model: 'One' }));
+    assert.equal(bad.status, 400);
+    assert.equal(t.db.prepare("SELECT 1 FROM used_makes WHERE name = 'Zzyzx Motors'").get(), undefined);
+  });
+
   test('duplicate check finds open enquiries with the same phone across the dealership', async () => {
     const r = await hbManager.get('/api/enquiries/duplicates?phone=0412%20345%20678');
     assert.equal(r.body.matches.length, 1);
