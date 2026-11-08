@@ -112,10 +112,22 @@ This is the most important part for usefulness. Reports are only as good as the 
 | Field | Why | How |
 |---|---|---|
 | **Salesperson** | Needed for permissions, follow-ups and per-person conversion | Automatically the logged-in user. Managers can reassign. |
-| **Model** | Stops over-typing and gives "most-enquired models" reports | Dropdown filtered by brand, managed per brand in Admin. Old models can be retired (hidden from new entries, kept on old ones). For **Used Cars**: make (dropdown) + model + optional stock number. |
+| **Model** | Stops over-typing and gives "most-enquired models" reports | Dropdown filtered by brand, managed per brand in Admin. Old models can be retired (hidden from new entries, kept on old ones). For **Used Cars** see below. |
 | **Next follow-up date** | Drives the reminders | Required while the enquiry is Open. Defaults to tomorrow with one-tap +1 day / +3 days / +1 week. |
 | **Lost reason** | Shows *why* enquiries are lost | Required when Outcome = Lost. Dropdown: Price, Finance declined, Bought elsewhere, Not ready, No stock, No contact, Other. |
 | **Source** (optional) | Walk-in vs phone vs web | Dropdown, defaults to Walk-in. Can be switched off in Admin if not wanted. |
+
+### Used Cars enquiries
+
+When the brand is **Used Cars**, the Model field is replaced by:
+
+| Field | How it's entered |
+|---|---|
+| **Make** | Dropdown of makes (Toyota, Ford, Mazda, Hyundai, etc.), managed in Admin. Required. |
+| **Model** | Dropdown of that make's models where we have them (shared with the new-car model lists, e.g. Nissan → X-Trail), with an admin-managed list for other makes. "Other" with short text as a last resort, which managers can review and add to the list. Required. |
+| **Stock number** | Optional text, upper-cased automatically (e.g. `U12345`). Searchable, so a salesperson can find every enquiry on the same car. |
+
+Used-car reports show enquiries and conversion by make and model, and how many enquiries each stock number received.
 
 ### Other safeguards
 - **Duplicate check:** when a phone number or email is entered, warn if an open enquiry already exists for that customer and show who owns it.
@@ -149,7 +161,7 @@ This is the most important part for usefulness. Reports are only as good as the 
 ### Rollout tactics (non-technical, equally important)
 
 - **Pilot at Caloundra** (Hyundai, Nissan, MG, Chery, LDV, Jeep, Leapmotor, GAC, JMC, Used Cars) for 2–3 weeks, then adjust before rolling out to Maroochydore, Kingaroy and Hervey Bay. The full system (all sites and brands) is built before the pilot; the other sites are simply switched on afterwards.
-- Import all currently open enquiries from the Excel workbook so nobody has to re-enter them.
+- Import all currently open enquiries from the Excel workbook so nobody has to re-enter them (see the import tool in §11).
 - Pick a **hard cut-over date** after which the spreadsheet is read-only.
 - Managers run the morning meeting from the **Overdue follow-ups** and **Yesterday's walk-ins** screens. If managers use it, salespeople will too.
 - A one-page "how to log a walk-in" card, plus a 15-minute walkthrough per team.
@@ -166,7 +178,7 @@ This is the most important part for usefulness. Reports are only as good as the 
   - **End-of-day summary** to sales managers and the GM (see §7).
   - **Escalation email** to the manager when a follow-up is overdue by X days.
   - Send times are set in Admin. Each user can be switched on/off for each email.
-  - Sent through Sunco's existing email account (SMTP) or a transactional email service, from an address like `crm@suncomotors…`.
+  - Sent through Sunco's existing email account (SMTP) or a transactional email service. **The sending account is decided later.** The email features are built and switched on once an account is entered in Admin. Until then, reminders show in the app (Today screen, overdue badges, manager dashboard).
 - Phone push notifications are left out of v1 (could be added later).
 - **Escalation:** if a follow-up is overdue by X days (admin setting, e.g. 3), it shows on the manager's dashboard and triggers the escalation email.
 - **Stale enquiries:** an open enquiry with no activity for Y days (e.g. 30/60) prompts "close as Lost?" so the pipeline stays clean without a month-end clear-out.
@@ -302,7 +314,7 @@ audit_log      (id, user_id, action, entity, entity_id, before, after, created_a
 | **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, email reminders and digests, manager escalation | Nothing falls through the cracks |
 | **3. Reporting** (~1 week) | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
 | **4. Admin & branding** (~1 week) | Full admin screens (brands, models, locations, sales managers, users, lists, branding, settings, audit log, backups & restore) | Self-service changes, no developer needed |
-| **5. Migration & pilot** (~1–2 weeks) | Excel import tool (open enquiries + optional history, each brand tab mapped to its franchise), pilot at **Caloundra** (all 10 Caloundra brands), fixes from feedback | Proven with real users |
+| **5. Migration & pilot** (~1–2 weeks) | Excel import tool in Admin: upload the workbook, match each tab to its brand + site and each column to a CRM field (pre-filled from the §4 column list), preview with any problem rows flagged (bad dates, unknown models, Sold and Lost both ticked), then import open enquiries + optional history. Unknown models are matched to the model list or flagged for review. Built without a sample, so it's designed to cope with format differences. Then the pilot at **Caloundra** (all 10 Caloundra brands), fixes from feedback | Proven with real users |
 | **6. Go-live** | Hosting setup, backup + restore test, training, switch on Maroochydore, Kingaroy and Hervey Bay, spreadsheet cut-over date | Whole dealership (all 4 sites, 21 brands) on the CRM |
 
 Timelines are rough working estimates and depend on answers to §12.
@@ -315,10 +327,10 @@ Timelines are rough working estimates and depend on answers to §12.
 2. **People:** ✅ Assume at least one sales manager per site; more can be added in Admin with their own brands. Exact numbers not needed yet.
 3. **Hosting / login:** ✅ No Google Workspace, so the CRM has its own logins. Cloud hosting recommended for 4-site access (see §8); final choice of provider before go-live.
 4. **Devices:** ✅ Phone, tablet and desk PC, all equally supported (see §5).
-5. **Spreadsheet columns:** ✅ Confirmed (see §4). A sample copy with customer details removed would still help when building the import, to check the date and Yes/No formats.
+5. **Spreadsheet columns:** ✅ Confirmed (see §4). No sample workbook will be provided; the import tool lets you match columns and preview before anything is imported.
 6. **Conversion definition:** ✅ Enquiries sold ÷ enquiries (e.g. 20 sold from 60 = 33%), counted against the month the enquiry was entered (see §10).
-7. **Used cars:** do you want to link to a stock number/stock list, or just make + model?
-8. **Notifications:** ✅ Email reminders. **Still needed before go-live:** which email account/domain the reminders should be sent from.
+7. **Used cars:** ✅ Make + model (dropdowns) + optional stock number (see §4).
+8. **Notifications:** ✅ Email reminders. The sending account is deferred; in-app reminders work until it's set up in Admin.
 9. **Rollout scope:** ✅ Full build for all 4 sites and 21 brands; pilot at Caloundra first.
 10. **Brand spelling:** ✅ "GMSV" and "GWM" exactly. "Chery" and "Leapmotor" assumed (renameable in Admin).
 11. **Data retention:** ✅ Keep all enquiries permanently, with nightly backups and manual backup/restore (see §8).
