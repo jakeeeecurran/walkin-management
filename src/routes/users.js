@@ -178,6 +178,32 @@ module.exports = function userRoutes({ db }) {
     res.json({ user: publicUser(db, db.prepare('SELECT * FROM users WHERE id = ?').get(target.id)) });
   });
 
+  // Moves a person's open enquiries to someone else (e.g. when they leave). Only enquiries in brands/sites
+  // the manager covers and the new person is assigned to are moved; the rest are reported back.
+  router.post('/:id/reassign-open', (req, res) => {
+    const from = getManageable(req);
+    const toId = v.id(req.body?.to_user_id, 'to_user_id', { required: true });
+    if (toId === from.id) throw new v.ValidationError('to_user_id', 'Choose a different person');
+    const rows = db.prepare("SELECT id, franchise_id FROM enquiries WHERE salesperson_id = ? AND outcome = 'open' AND is_invalid = 0").all(from.id);
+    const toName = db.prepare('SELECT name FROM users WHERE id = ?').get(toId)?.name;
+    if (!toName) throw new v.ValidationError('to_user_id', 'Unknown user');
+    let moved = 0;
+    let notMoved = 0;
+    transaction(db, () => {
+      for (const r of rows) {
+        if (!scope.canAssignTo(db, req.user, r.franchise_id, toId)) {
+          notMoved++;
+          continue;
+        }
+        db.prepare('UPDATE enquiries SET salesperson_id = ?, updated_at = ? WHERE id = ?').run(toId, nowIso(), r.id);
+        db.prepare("INSERT INTO activities (enquiry_id, user_id, type, body) VALUES (?, ?, 'reassigned', ?)").run(r.id, req.user.id, `${from.name} → ${toName}`);
+        moved++;
+      }
+      audit(db, { userId: req.user.id, action: 'reassign_open', entity: 'user', entityId: from.id, after: { to_user_id: toId, moved, not_moved: notMoved } });
+    });
+    res.json({ moved, not_moved: notMoved });
+  });
+
   router.post('/:id/reset-password', (req, res) => {
     const target = getManageable(req);
     if (target.id === req.user.id) throw forbidden('Use "Change password" to change your own password');

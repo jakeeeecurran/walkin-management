@@ -8,8 +8,14 @@ const { DEFAULT_TZ } = require('./lib/time');
 const referenceRoutes = require('./routes/reference');
 const enquiryRoutes = require('./routes/enquiries');
 const userRoutes = require('./routes/users');
+const reportRoutes = require('./routes/reports');
+const adminRoutes = require('./routes/admin');
+const systemRoutes = require('./routes/system');
+const { createBackupService } = require('./services/backup');
+const { createImporter } = require('./services/importer');
+const { createMailer } = require('./services/mailer');
 
-function createApp({ db, secret, cookieSecure = false, trustProxy = false, logErrors = true }) {
+function createApp({ db, secret, backupDir, cookieSecure = false, trustProxy = false, logErrors = true, transportFactory }) {
   const app = express();
   if (trustProxy) app.set('trust proxy', 1);
   app.disable('x-powered-by');
@@ -34,10 +40,11 @@ function createApp({ db, secret, cookieSecure = false, trustProxy = false, logEr
   app.use(express.json({ limit: '100kb' }));
 
   // CSRF protection: session cookies are SameSite=Strict, and any request that changes data
-  // must be JSON from this same site.
+  // must be JSON (or a file upload carrying the X-Sunco-Upload header) from this same site.
   app.use('/api', (req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-    if (!req.is('application/json')) return next(new HttpError(415, 'Requests must be sent as JSON'));
+    const isUpload = req.is('application/octet-stream') && req.get('x-sunco-upload') === '1';
+    if (!req.is('application/json') && !isUpload) return next(new HttpError(415, 'Requests must be sent as JSON'));
     const origin = req.get('origin');
     if (origin) {
       let host;
@@ -53,6 +60,12 @@ function createApp({ db, secret, cookieSecure = false, trustProxy = false, logEr
 
   const timeZone = db.prepare("SELECT value FROM settings WHERE key = 'timezone'").get()?.value || DEFAULT_TZ;
   const auth = createAuth({ db, secret, cookieSecure });
+  const services = {
+    backups: createBackupService({ db, dir: backupDir }),
+    importer: createImporter({ db }),
+    mailer: createMailer({ db, ...(transportFactory ? { transportFactory } : {}) }),
+  };
+  app.locals.services = services;
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -67,6 +80,9 @@ function createApp({ db, secret, cookieSecure = false, trustProxy = false, logEr
   app.use('/api/reference', referenceRoutes({ db }));
   app.use('/api/enquiries', enquiryRoutes({ db, timeZone }));
   app.use('/api/users', userRoutes({ db }));
+  app.use('/api/reports', reportRoutes({ db }));
+  app.use('/api/admin', adminRoutes({ db }));
+  app.use('/api/admin', systemRoutes({ db, backups: services.backups, importer: services.importer, mailer: services.mailer }));
 
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Not found')));
 

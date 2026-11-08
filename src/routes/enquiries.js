@@ -63,8 +63,15 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     return row;
   }
 
-  function addActivity(enquiryId, userId, type, body) {
-    db.prepare('INSERT INTO activities (enquiry_id, user_id, type, body) VALUES (?, ?, ?, ?)').run(enquiryId, userId, type, body ?? null);
+  function addActivity(enquiryId, userId, type, body, followupDue = null) {
+    db.prepare('INSERT INTO activities (enquiry_id, user_id, type, body, followup_due, local_date) VALUES (?, ?, ?, ?, ?, ?)').run(
+      enquiryId,
+      userId,
+      type,
+      body ?? null,
+      followupDue,
+      today()
+    );
   }
 
   // Validates input against the current record (if editing) and the user's permissions,
@@ -178,6 +185,7 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     rec.lost_reason_id = null;
     rec.next_followup_at = null;
     rec.sold_at = null;
+    rec.sold_date = null;
     rec.closed_at = null;
     if (outcome === 'open') {
       let follow = v.isoDate(pick('next_followup_at', existing?.next_followup_at), 'next_followup_at');
@@ -190,7 +198,9 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     } else {
       rec.closed_at = !isNew && existing.outcome === outcome ? existing.closed_at : nowIso();
       if (outcome === 'sold') {
-        rec.sold_at = !isNew && existing.outcome === 'sold' ? existing.sold_at : nowIso();
+        const keep = !isNew && existing.outcome === 'sold';
+        rec.sold_at = keep ? existing.sold_at : nowIso();
+        rec.sold_date = keep ? existing.sold_date : today();
       } else {
         const reasonId = v.id(pick('lost_reason_id', existing?.lost_reason_id), 'lost_reason_id', { required: true });
         const r = db.prepare("SELECT * FROM lookup_values WHERE id = ? AND list_type = 'lost_reason'").get(reasonId);
@@ -397,6 +407,25 @@ module.exports = function enquiryRoutes({ db, timeZone }) {
     addActivity(row.id, req.user.id, type, body);
     db.prepare('UPDATE enquiries SET updated_at = ? WHERE id = ?').run(nowIso(), row.id);
     res.status(201).json({ ok: true });
+  });
+
+  // Log a follow-up (call, email, SMS, no answer...) and set the next follow-up date in one step.
+  router.post('/:id/followup', (req, res) => {
+    const row = getVisible(req);
+    if (!scope.canEditEnquiry(db, req.user, row)) throw forbidden();
+    if (row.outcome !== 'open') throw badRequest('This enquiry is already closed');
+    const type = v.oneOf(req.body?.type ?? 'followup_done', 'type', ['call', 'email', 'sms', 'followup_done']);
+    const noAnswer = req.body?.no_answer === true;
+    const note = v.multilineText(req.body?.body, 'body');
+    const next = v.isoDate(req.body?.next_followup_at, 'next_followup_at', { required: true });
+    if (next < today()) throw new v.ValidationError('next_followup_at', 'Next follow-up cannot be in the past');
+    const labels = { call: 'Called', email: 'Emailed', sms: 'Sent SMS', followup_done: 'Followed up' };
+    const body = [labels[type] + (noAnswer ? ' (no answer)' : ''), note].filter(Boolean).join(': ');
+    transaction(db, () => {
+      addActivity(row.id, req.user.id, type, `${body}. Next follow-up ${next}`, row.next_followup_at);
+      db.prepare('UPDATE enquiries SET next_followup_at = ?, updated_at = ? WHERE id = ?').run(next, nowIso(), row.id);
+    });
+    res.json({ enquiry: present(load(row.id), req.user) });
   });
 
   // Mark as duplicate/invalid (or undo). Enquiries are never deleted.

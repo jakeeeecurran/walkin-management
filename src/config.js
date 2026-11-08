@@ -25,6 +25,8 @@ module.exports = {
   dataDir,
   port: Number(process.env.PORT) || 3000,
   dbPath: process.env.DB_PATH || path.join(dataDir, 'sunco-crm.db'),
+  // Put this on a different drive or a synced cloud folder so backups survive a server failure.
+  backupDir: path.resolve(process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
   loadSecret,
   // Secure (HTTPS-only) cookies in production unless explicitly turned off for a plain-HTTP local network.
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : isProduction,

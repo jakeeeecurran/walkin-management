@@ -1,0 +1,259 @@
+const { test, before, after, describe } = require('node:test');
+const assert = require('node:assert/strict');
+const ExcelJS = require('exceljs');
+const { startTestServer } = require('./helpers');
+const { localDate, addDays } = require('../src/lib/time');
+
+let t;
+let gm, manager, sam, kim;
+const today = localDate();
+
+before(async () => {
+  t = await startTestServer();
+  t.createUser({ username: 'boss', role: 'general_manager', isAdmin: true });
+  t.createUser({ username: 'mgr', role: 'sales_manager', franchises: [['Caloundra', 'MG'], ['Caloundra', 'Used Cars'], ['Caloundra', 'Hyundai']] });
+  t.createUser({ username: 'sam', franchises: [['Caloundra', 'MG'], ['Caloundra', 'Used Cars']] });
+  t.createUser({ username: 'kim', franchises: [['Caloundra', 'MG']] });
+  [gm, manager, sam, kim] = [t.client(), t.client(), t.client(), t.client()];
+  await gm.login('boss');
+  await manager.login('mgr');
+  await sam.login('sam');
+  await kim.login('kim');
+});
+after(async () => t.close());
+
+async function enquiry(c, overrides = {}) {
+  const r = await c.post('/api/enquiries', {
+    location_id: t.ids.location('Caloundra'),
+    brand_id: t.ids.brand('MG'),
+    model_id: t.ids.model('MG', 'ZS'),
+    customer_name: 'Test Customer',
+    postcode: '4551',
+    phone: `04${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`,
+    ...overrides,
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.enquiry;
+}
+
+describe('follow-ups', () => {
+  test('logging a call sets the next follow-up and records whether it was on time', async () => {
+    const e = await enquiry(sam);
+    const r = await sam.post(`/api/enquiries/${e.id}/followup`, { type: 'call', no_answer: true, next_followup_at: addDays(today, 3) });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.enquiry.next_followup_at, addDays(today, 3));
+    const detail = await sam.get(`/api/enquiries/${e.id}`);
+    assert.match(detail.body.activities[0].body, /Called \(no answer\)/);
+    const past = await sam.post(`/api/enquiries/${e.id}/followup`, { type: 'call', next_followup_at: addDays(today, -1) });
+    assert.equal(past.status, 400);
+  });
+
+  test("the Today list shows what's due and overdue", async () => {
+    const e = await enquiry(sam, { next_followup_at: today });
+    const r = await sam.get('/api/enquiries?due=today');
+    assert.ok(r.body.items.some((x) => x.id === e.id));
+  });
+});
+
+describe('reports', () => {
+  test('conversion is enquiries sold ÷ enquiries, and salespeople only see their own figures', async () => {
+    const before = (await manager.get(`/api/reports/summary?period=day&date=${today}`)).body.totals;
+    const a = await enquiry(kim);
+    await enquiry(kim);
+    await enquiry(kim, { test_drive: true });
+    await kim.patch(`/api/enquiries/${a.id}`, { outcome: 'sold' });
+    const s = (await kim.get(`/api/reports/summary?period=day&date=${today}`)).body;
+    assert.equal(s.totals.enquiries, 3);
+    assert.equal(s.totals.sold, 1);
+    assert.equal(s.totals.conversion, 33.3);
+    assert.equal(s.totals.test_drives, 1);
+    assert.equal(s.totals.cars_sold, 1);
+    assert.deepEqual(s.by_salesperson.map((x) => x.label), ['Kim']);
+    const m = (await manager.get(`/api/reports/summary?period=day&date=${today}`)).body;
+    assert.equal(m.totals.enquiries, before.enquiries + 3);
+    assert.ok(m.by_salesperson.length >= 2);
+    assert.ok(m.enquiries.length >= 3);
+  });
+
+  test('month and year periods compare with the previous period', async () => {
+    const s = (await manager.get('/api/reports/summary?period=month')).body;
+    assert.equal(s.period.from, today.slice(0, 7) + '-01');
+    assert.ok(s.previous);
+    const y = (await manager.get('/api/reports/summary?period=year')).body;
+    assert.equal(y.period.from, today.slice(0, 4) + '-01-01');
+  });
+
+  test('managers can export CSV; salespeople cannot; formulas are neutralised', async () => {
+    await enquiry(sam, { customer_name: '=HYPERLINK("x")' });
+    assert.equal((await sam.get('/api/reports/export.csv')).status, 403);
+    const r = await manager.get('/api/reports/export.csv');
+    assert.equal(r.status, 200);
+    assert.match(r.body, /Enquiry #,Date of entry,Month,Brand,Department/);
+    assert.match(r.body, /'=HYPERLINK/i);
+  });
+});
+
+describe('admin', () => {
+  test('only the GM/admin can use admin screens', async () => {
+    assert.equal((await manager.get('/api/admin/settings')).status, 403);
+    assert.equal((await gm.get('/api/admin/settings')).status, 200);
+  });
+
+  test('adding a brand at a site makes it available; retiring a model hides it from new enquiries', async () => {
+    const b = await gm.post('/api/admin/brands', { name: 'Zeekr', colour: '#000000', location_ids: [t.ids.location('Maroochydore')] });
+    assert.equal(b.status, 201, JSON.stringify(b.body));
+    const m = await gm.post('/api/admin/models', { brand_id: b.body.brand.id, name: '7X' });
+    assert.equal(m.status, 201);
+    const ref = (await gm.get('/api/reference')).body;
+    assert.ok(ref.franchises.some((f) => f.brand_id === b.body.brand.id && f.location_id === t.ids.location('Maroochydore') && f.can_create));
+
+    const zs = t.ids.model('MG', 'ZS');
+    assert.equal((await gm.patch(`/api/admin/models/${zs}`, { active: false })).status, 200);
+    const r = await sam.post('/api/enquiries', { location_id: t.ids.location('Caloundra'), brand_id: t.ids.brand('MG'), model_id: zs, customer_name: 'X', postcode: '4551', phone: '0400000001' });
+    assert.equal(r.status, 400);
+    await gm.patch(`/api/admin/models/${zs}`, { active: true });
+  });
+
+  test('a brand can be switched off at one site without losing history', async () => {
+    const r = await gm.raw('PUT', '/api/admin/franchises', { location_id: t.ids.location('Caloundra'), brand_id: t.ids.brand('Hyundai'), active: false });
+    assert.equal(r.status, 200);
+    const create = await manager.post('/api/enquiries', {
+      location_id: t.ids.location('Caloundra'), brand_id: t.ids.brand('Hyundai'), model_id: t.ids.model('Hyundai', 'Tucson'), customer_name: 'Y', postcode: '4551', phone: '0400000002',
+    });
+    assert.equal(create.status, 400);
+    await gm.raw('PUT', '/api/admin/franchises', { location_id: t.ids.location('Caloundra'), brand_id: t.ids.brand('Hyundai'), active: true });
+  });
+
+  test('settings are validated; the SMTP password is never sent back', async () => {
+    assert.equal((await gm.raw('PUT', '/api/admin/settings', { 'branding.primary_colour': 'blue' })).status, 400);
+    assert.equal((await gm.raw('PUT', '/api/admin/settings', { 'email.smtp_password': 'secret', 'branding.name': 'Sunco Motors Group' })).status, 200);
+    const s = (await gm.get('/api/admin/settings')).body;
+    assert.equal(s.settings['email.smtp_password'], undefined);
+    assert.equal(s.smtp_password_set, true);
+    assert.equal((await t.client().get('/api/branding')).body.name, 'Sunco Motors Group');
+  });
+});
+
+describe('backups', () => {
+  test('back up now, then restore brings the data back', async () => {
+    const e = await enquiry(sam, { customer_name: 'Before Backup' });
+    const b = await gm.post('/api/admin/backups', {});
+    assert.equal(b.status, 201);
+    assert.match(b.body.backup.name, /manual\.db$/);
+    await enquiry(sam, { customer_name: 'After Backup' });
+
+    assert.equal((await manager.post(`/api/admin/backups/${b.body.backup.name}/restore`, { confirm: 'RESTORE' })).status, 403);
+    assert.equal((await gm.post(`/api/admin/backups/${b.body.backup.name}/restore`, {})).status, 400);
+    const r = await gm.post(`/api/admin/backups/${b.body.backup.name}/restore`, { confirm: 'RESTORE' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.match(r.body.safety_backup, /pre-restore/);
+    const names = t.db.prepare('SELECT customer_name FROM enquiries').all().map((x) => x.customer_name);
+    assert.ok(names.includes('Before Backup'));
+    assert.ok(!names.includes('After Backup'));
+    assert.ok(t.db.prepare('SELECT 1 FROM enquiries WHERE id = ?').get(e.id));
+    const list = (await gm.get('/api/admin/backups')).body.items;
+    assert.ok(list.length >= 2);
+  });
+
+  test('backup files can be downloaded by the GM', async () => {
+    const name = (await gm.get('/api/admin/backups')).body.items[0].name;
+    const res = await fetch(`${t.base}/api/admin/backups/${name}`, { headers: { cookie: '' } });
+    assert.equal(res.status, 401);
+  });
+});
+
+describe('spreadsheet import', () => {
+  async function workbook() {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('MG');
+    ws.addRow(['Date of Entry', 'Current Month', 'Brand', 'Department', 'Customer Name', 'Customer Postcode', 'Phone Number', 'Email Address', 'Test Drive', 'Trade', 'Finance', 'Lost', 'Comments', 'Sold']);
+    ws.addRow([new Date(Date.UTC(2026, 9, 3)), 'October', 'MG', 'Calandra', 'alan import', 4551, '412345111', 'alan@example.com', 'Yes', 'No', 'Yes', '', 'Wants ZS', '']);
+    ws.addRow(['04/10/2026', 'October', 'MG', 'Caloundra', 'Beth Import', '4551', '0412 345 222', '', 'Y', 'Y', '', '', '', 'Yes']);
+    ws.addRow(['05/10/2026', 'October', 'MG', 'Caloundra', 'Both Ticked', '4551', '0412345333', '', '', '', '', 'Yes', '', 'Yes']);
+    ws.addRow(['06/10/2026', 'October', 'Polestar', 'Caloundra', 'Unknown Brand', '4551', '0412345444', '', '', '', '', '', '', '']);
+    const used = wb.addWorksheet('Used');
+    used.addRow(['Date of Entry', 'Brand', 'Department', 'Customer Name', 'Customer Postcode', 'Phone Number', 'Lost']);
+    used.addRow(['07/10/2026', '', 'Caloundra', 'Carl Used', '4551', 'not a phone', 'yes']);
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+
+  test('preview guesses the columns; dry run reports problems; import adds rows once', async () => {
+    const p = await gm.raw('POST', '/api/admin/import/preview', await workbook());
+    assert.equal(p.status, 200, JSON.stringify(p.body));
+    const [mg, used] = p.body.sheets;
+    assert.equal(mg.mapping.customer_name, 4);
+    assert.equal(mg.mapping.postcode, 5);
+    assert.equal(mg.mapping.department, 3);
+    assert.equal(mg.mapping.sold, 13);
+    assert.equal(mg.guessed_brand_id, t.ids.brand('MG'));
+    assert.equal(used.guessed_brand_id, t.ids.brand('Used Cars'));
+
+    const samId = (await sam.get('/api/auth/me')).body.user.id;
+    const sheets = [
+      { name: 'MG', include: true, mapping: mg.mapping, salesperson_id: samId },
+      { name: 'Used', include: true, mapping: used.mapping, brand_id: t.ids.brand('Used Cars'), salesperson_id: samId },
+    ];
+    const dry = await gm.post('/api/admin/import/run', { token: p.body.token, sheets, dry_run: true });
+    assert.equal(dry.status, 200, JSON.stringify(dry.body));
+    assert.equal(dry.body.will_import, 3);
+    assert.equal(dry.body.sold, 1);
+    assert.equal(dry.body.lost, 1);
+    assert.equal(dry.body.skipped_rows, 2);
+    assert.ok(dry.body.problems.some((x) => /both Sold and Lost/.test(x.message)));
+    assert.ok(dry.body.problems.some((x) => /Polestar/.test(x.message)));
+
+    const run = await gm.post('/api/admin/import/run', { token: p.body.token, sheets, dry_run: false });
+    assert.equal(run.body.imported, 3);
+    const alan = t.db.prepare("SELECT * FROM enquiries WHERE customer_name = 'Alan Import'").get();
+    assert.equal(alan.phone, '0412345111');
+    assert.equal(alan.entry_month, '2026-10');
+    assert.equal(alan.finance, 1);
+    assert.equal(alan.outcome, 'open');
+    const carl = t.db.prepare("SELECT * FROM enquiries WHERE customer_name = 'Carl Used'").get();
+    assert.equal(carl.outcome, 'lost');
+    assert.equal(carl.phone, null);
+
+    const again = await gm.raw('POST', '/api/admin/import/preview', await workbook());
+    const rerun = await gm.post('/api/admin/import/run', { token: again.body.token, sheets, dry_run: true });
+    assert.equal(rerun.body.will_import, 0);
+    assert.equal(rerun.body.already_imported, 3);
+  });
+});
+
+describe('email reminders', () => {
+  test('nothing is sent until email is set up; then each person gets one morning email', async () => {
+    t.db.prepare("UPDATE users SET email = 'sam@example.com' WHERE username = 'sam'").run();
+    t.db.prepare("UPDATE users SET email = 'mgr@example.com' WHERE username = 'mgr'").run();
+    await enquiry(sam, { customer_name: 'Due Today', next_followup_at: today });
+    const off = await gm.post('/api/admin/email/send-now', { kind: 'morning' });
+    assert.equal(off.body.sent, 0);
+    await gm.raw('PUT', '/api/admin/settings', { 'email.enabled': true, 'email.smtp_host': 'smtp.example.com', 'email.from': 'crm@example.com' });
+    const on = await gm.post('/api/admin/email/send-now', { kind: 'morning' });
+    assert.ok(on.body.sent >= 2, JSON.stringify(on.body));
+    const toSam = t.sentMail.find((m) => m.to === 'sam@example.com');
+    assert.match(toSam.subject, /follow-up/);
+    assert.match(toSam.html, /Due Today/);
+    const again = await gm.post('/api/admin/email/send-now', { kind: 'morning' });
+    assert.equal(again.body.sent, 0);
+    const eod = await gm.post('/api/admin/email/send-now', { kind: 'eod' });
+    assert.ok(t.sentMail.some((m) => m.to === 'mgr@example.com' && /End of day/.test(m.subject)), JSON.stringify(eod.body));
+    assert.ok(!t.sentMail.some((m) => m.to === 'sam@example.com' && /End of day/.test(m.subject)));
+  });
+
+  test('people can turn their reminder emails off', async () => {
+    const r = await sam.patch('/api/auth/me', { notify_email: false });
+    assert.equal(r.body.user.notify_email, false);
+  });
+});
+
+describe('team changes', () => {
+  test("a manager can move a leaver's open enquiries to someone else", async () => {
+    const samId = (await sam.get('/api/auth/me')).body.user.id;
+    const kimId = (await kim.get('/api/auth/me')).body.user.id;
+    await enquiry(sam, { brand_id: t.ids.brand('Used Cars'), model_id: undefined, used_make_id: t.ids.usedMake('Toyota'), used_model_other: 'Supra' });
+    const r = await manager.post(`/api/users/${samId}/reassign-open`, { to_user_id: kimId });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(r.body.moved > 0);
+    assert.ok(r.body.not_moved > 0); // Kim doesn't cover Used Cars
+  });
+});

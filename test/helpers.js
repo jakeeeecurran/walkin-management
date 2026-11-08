@@ -1,12 +1,18 @@
 const { openDatabase } = require('../src/db');
 const { createApp } = require('../src/app');
 const { hashPassword } = require('../src/auth');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const PASSWORD = 'correct-horse-battery';
 
 async function startTestServer() {
   const db = openDatabase(':memory:');
-  const app = createApp({ db, secret: 'x'.repeat(48), cookieSecure: false, logErrors: false });
+  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sunco-test-backups-'));
+  const sentMail = [];
+  const transportFactory = () => ({ sendMail: async (m) => sentMail.push(m) });
+  const app = createApp({ db, secret: 'x'.repeat(48), cookieSecure: false, logErrors: false, backupDir, transportFactory });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));
   });
@@ -47,11 +53,11 @@ async function startTestServer() {
       const res = await fetch(base + path, {
         method,
         headers: {
-          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(Buffer.isBuffer(body) ? { 'content-type': 'application/octet-stream', 'x-sunco-upload': '1' } : body !== undefined ? { 'content-type': 'application/json' } : {}),
           ...(cookie ? { cookie } : {}),
           ...headers,
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: Buffer.isBuffer(body) ? body : body !== undefined ? JSON.stringify(body) : undefined,
       });
       const set = res.headers.get('set-cookie');
       if (set) cookie = set.split(';')[0];
@@ -80,9 +86,10 @@ async function startTestServer() {
   async function close() {
     await new Promise((r) => server.close(r));
     db.close();
+    fs.rmSync(backupDir, { recursive: true, force: true });
   }
 
-  return { db, base, ids, createUser, client, close, PASSWORD };
+  return { db, base, ids, createUser, client, close, PASSWORD, app, sentMail, backupDir };
 }
 
 module.exports = { startTestServer };

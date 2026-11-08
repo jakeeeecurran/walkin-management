@@ -42,6 +42,7 @@ function publicUser(db, user) {
     home_location_id: user.home_location_id,
     active: user.active === 1,
     must_change_password: user.must_change_password === 1,
+    notify_email: user.notify_email === 1,
     full_access: scope.hasFullAccess(user),
     franchises,
   };
@@ -140,6 +141,25 @@ function createAuth({ db, secret, cookieSecure }) {
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     issue(res, updated, req.body?.remember === true);
     res.json({ user: publicUser(db, updated) });
+  });
+
+  // Users can update their own email address and email reminder preference.
+  router.patch('/me', authenticate, requirePasswordCurrent, (req, res) => {
+    const b = req.body || {};
+    const updates = {};
+    if (b.email !== undefined) {
+      updates.email = v.email(b.email);
+      if (updates.email && db.prepare('SELECT 1 FROM users WHERE email = ? AND id != ?').get(updates.email, req.user.id)) {
+        throw new v.ValidationError('email', 'That email is already used by another user');
+      }
+    }
+    if (b.notify_email !== undefined) updates.notify_email = v.bool(b.notify_email);
+    const cols = Object.keys(updates);
+    if (cols.length) {
+      db.prepare(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((c) => updates[c]), nowIso(), req.user.id);
+      audit(db, { userId: req.user.id, action: 'update_account', entity: 'user', entityId: req.user.id, after: updates });
+    }
+    res.json({ user: publicUser(db, db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
   });
 
   return { router, authenticate, requirePasswordCurrent };
