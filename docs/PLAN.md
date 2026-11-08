@@ -202,9 +202,25 @@ The app is built once and can run in either of these setups. Only configuration 
 
 ### Initial setup (seeded, all editable later)
 **Locations:** Caloundra, Maroochydore, Kingaroy, Hervey Bay.
-**Brands:** Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars.
+**Brands (21):** Audi, Chery, Ford, GAC, Geely, GMSV, GWM, Honda, Hyundai, Isuzu, Jeep, JMC, Kia, LDV, Leapmotor, MG, Mitsubishi, Nissan, Volvo, XPeng, Used Cars.
 Each brand will be seeded with its current Australian model line-up for you to check and correct before go-live. Models belong to the brand, so they're shared across all locations that sell it.
-**Franchises (brand × location):** *to be confirmed, see §12 Q1.*
+**Franchises (brand × location), 33 in total:**
+
+| Location | Brands |
+|---|---|
+| **Caloundra** (10) | Hyundai, Nissan, MG, Chery, LDV, Jeep, Leapmotor, GAC, JMC, Used Cars |
+| **Maroochydore** (9) | Hyundai, Nissan, Audi, MG, LDV, GMSV, Volvo, GAC, Used Cars |
+| **Kingaroy** (7) | Hyundai, Nissan, Ford, Mitsubishi, Geely, GWM, Used Cars |
+| **Hervey Bay** (7) | Nissan, Isuzu, Honda, Kia, XPeng, GWM, Used Cars |
+
+Brands at more than one site share one model list (e.g. Nissan's models are set up once and used at all four sites). Used Cars runs at every location.
+
+### Adding and removing brands (Admin)
+This is only a starting setup. Everything here can be changed in the Admin portal without a developer:
+- **Add a brand:** enter the name and colour, tick the locations that sell it, add its models. It shows up in the enquiry form for users assigned to it straight away.
+- **Add a brand to another site:** tick the box in the location × brand grid.
+- **Remove a brand (or remove it from one site):** switch it to *inactive*. It disappears from new enquiries and user assignments, but its past enquiries and reports are kept. Hard delete is only allowed for a brand that has never had an enquiry (e.g. a typo).
+- **Models:** add, rename, reorder or retire per brand at any time.
 
 ---
 
@@ -253,7 +269,7 @@ Timelines are rough working estimates and depend on answers to §12.
 
 ## 12. Questions to answer before building
 
-1. **Locations:** ✅ Caloundra, Maroochydore, Kingaroy, Hervey Bay. **Still needed:** which brands are sold at each site (fill in the grid below), and does Used Cars run at all four?
+1. **Locations and brands:** ✅ Confirmed. 4 locations, 21 brands, 33 brand-location combinations (see §9).
 2. **People:** roughly how many salespeople and managers? Do any salespeople sell more than one brand? Do managers cover several brands?
 3. **Hosting:** do staff need access from outside the dealership (home, other sites)? Does Sunco use **Google Workspace** (for Google sign-in) or Microsoft 365?
 4. **Devices:** will staff mostly use their phones, desk PCs or showroom tablets?
@@ -261,27 +277,9 @@ Timelines are rough working estimates and depend on answers to §12.
 6. **Conversion definition:** sold ÷ enquiries, or sold ÷ test drives? Counted by enquiry month or sale month? (We can show both.)
 7. **Used cars:** do you want to link to a stock number/stock list, or just make + model?
 8. **Notifications:** email, phone push, or both? Should managers get a daily end-of-day email automatically?
-9. **Other managers' brands:** other managers run other brands at Sunco. Should this be built so they can be added later (recommended), with you only managing your brands for now?
-10. **Brand spelling:** confirm "Chery" (the manufacturer) and "Leapmotor" as display names.
+9. **Rollout scope:** all 21 brands are set up from day one. Should the pilot and first rollout cover only the Caloundra brands you manage directly (Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars), with the other sites' managers brought on afterwards?
+10. **Brand spelling:** confirm display names "Chery", "Leapmotor", "GMSV" and "GWM" (or "GWM Haval"). Any can be renamed in Admin.
 11. **Data retention:** how long should customer details be kept on Lost enquiries?
-
----
-
-### Franchise grid to fill in (Q1)
-
-| Brand | Caloundra | Maroochydore | Kingaroy | Hervey Bay |
-|---|---|---|---|---|
-| Hyundai | | | | |
-| Nissan | | | | |
-| GAC | | | | |
-| JMC | | | | |
-| Leapmotor | | | | |
-| Jeep | | | | |
-| Chery | | | | |
-| LDV | | | | |
-| MG | | | | |
-| Used Cars | | | | |
-| *Other brands at the site (not yours, for later)* | | | | |
 
 ---
 
