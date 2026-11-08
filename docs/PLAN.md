@@ -1,6 +1,6 @@
 # Sunco Motors Walk-In CRM — Project Plan
 
-**Status:** Draft for review. Nothing in this plan has been built yet.
+**Status:** Requirements confirmed, ready to build (full build, piloted at Caloundra first). Nothing has been built yet.
 **Goal:** Replace the walk-in tracking Excel workbook (one tab per brand, carried over to a new tab each month) with a small CRM built for Sunco Motors. Sales staff need to use it every day, so it has to be quicker than the spreadsheet.
 
 ---
@@ -46,7 +46,9 @@ The repo already has a working prototype (`server.js` + `public/index.html`): No
 | View enquiries | Own only | All in assigned brands + locations | All | All |
 | Edit enquiry | Own only | Team's | All | All |
 | Reassign enquiry to another salesperson | ❌ | ✅ within team | ✅ | ✅ |
-| Delete enquiry | ❌ | ❌ (can mark "Duplicate/Invalid") | ✅ | ✅ |
+| Delete enquiry | ❌ Never. Enquiries are kept permanently. | ❌ | ❌ | ❌ |
+| Mark enquiry as *Duplicate/Invalid* (hidden from reports, still kept) | ❌ | ✅ | ✅ | ✅ |
+| Download / restore backups | ❌ | ❌ | ✅ download | ✅ download + restore |
 | Daily / monthly / yearly reports | Own figures | Team + per-salesperson | Whole dealership | All |
 | Export to CSV/Excel | ❌ | ✅ own scope | ✅ | ✅ |
 | Add / remove sales managers and assign their brands | ❌ | ❌ | ✅ | ✅ |
@@ -73,7 +75,9 @@ Sunco has **four locations: Caloundra, Maroochydore, Kingaroy and Hervey Bay**, 
 ### Login
 
 - Each person gets their own username and password (no shared PIN).
-- Optional: "Sign in with Google" if Sunco uses Google Workspace (see §8).
+- Sunco doesn't use Google Workspace, so there's no Google sign-in. Logins are the CRM's own: username (or email) and password.
+- "Forgot password" sends a reset link by email. Managers/admins can also reset passwords.
+- Users stay signed in on their own phone or PC for a set period (e.g. 30 days); shared showroom tablets/PCs can be set to sign out after inactivity.
 - A manager or admin can reset a password. Disabling a user keeps all their historical enquiries and lets them be reassigned.
 
 ---
@@ -132,7 +136,11 @@ This is the most important part for usefulness. Reports are only as good as the 
 
 ### Design decisions that help adoption
 
-- **Mobile-first web app** that can be "installed" on a phone home screen (PWA). No app store.
+- **One web app, laid out for every screen size:**
+  - **Phone:** single column, large buttons, bottom navigation, tap-to-call and tap-to-email. Can be added to the home screen like an app (no app store).
+  - **Tablet:** two-panel layout (enquiry list on the left, selected enquiry on the right), suits showroom-floor use in portrait or landscape.
+  - **Desk PC:** full table view with sortable columns (closest to the spreadsheet feel), keyboard shortcuts (e.g. `N` for new enquiry), and the full reporting dashboards.
+  - Tested on iPhone/Android phones, iPad/Android tablets, and Chrome/Edge on Windows.
 - Quick-update buttons on each enquiry: *Called*, *No answer*, *Booked test drive*, *Sold*, *Lost*. Each one adds a timestamped note to the activity history automatically.
 - Activity history per enquiry (who did what, when) replaces scattered notes cells.
 - No mandatory field that salespeople see as busywork. Every required field has to feed a report someone reads.
@@ -140,7 +148,7 @@ This is the most important part for usefulness. Reports are only as good as the 
 
 ### Rollout tactics (non-technical, equally important)
 
-- Pilot with one brand team for 1–2 weeks, then adjust before rolling out to the rest.
+- **Pilot at Caloundra** (Hyundai, Nissan, MG, Chery, LDV, Jeep, Leapmotor, GAC, JMC, Used Cars) for 2–3 weeks, then adjust before rolling out to Maroochydore, Kingaroy and Hervey Bay. The full system (all sites and brands) is built before the pilot; the other sites are simply switched on afterwards.
 - Import all currently open enquiries from the Excel workbook so nobody has to re-enter them.
 - Pick a **hard cut-over date** after which the spreadsheet is read-only.
 - Managers run the morning meeting from the **Overdue follow-ups** and **Yesterday's walk-ins** screens. If managers use it, salespeople will too.
@@ -152,11 +160,15 @@ This is the most important part for usefulness. Reports are only as good as the 
 
 - Each open enquiry always has a **next follow-up date** (optionally with a time).
 - **In-app:** badge count on the Today screen and a red "overdue" state.
-- **Browser/phone push notifications** (PWA) at a set time each morning: "You have 4 follow-ups today, 2 overdue."
-- **Email digest** (optional), via the dealership's email or Gmail:
-  - Salesperson: daily list of follow-ups due.
-  - Manager: daily summary of the team's overdue follow-ups and yesterday's walk-ins.
-- **Escalation:** if a follow-up is overdue by X days (admin setting, e.g. 3), it shows on the manager's dashboard.
+- **Email reminders (the main notification channel):**
+  - **Salesperson, each morning:** "You have 4 follow-ups today, 2 overdue", with each customer's name, phone, brand/model and a link straight to the enquiry.
+  - **Sales manager, each morning:** the team's overdue follow-ups and yesterday's walk-ins for their brands/site.
+  - **End-of-day summary** to sales managers and the GM (see §7).
+  - **Escalation email** to the manager when a follow-up is overdue by X days.
+  - Send times are set in Admin. Each user can be switched on/off for each email.
+  - Sent through Sunco's existing email account (SMTP) or a transactional email service, from an address like `crm@suncomotors…`.
+- Phone push notifications are left out of v1 (could be added later).
+- **Escalation:** if a follow-up is overdue by X days (admin setting, e.g. 3), it shows on the manager's dashboard and triggers the escalation email.
 - **Stale enquiries:** an open enquiry with no activity for Y days (e.g. 30/60) prompts "close as Lost?" so the pipeline stays clean without a month-end clear-out.
 
 ---
@@ -169,7 +181,7 @@ All reports respect the user's scope (a salesperson sees their own, a manager se
 - Walk-ins today by brand and salesperson.
 - Test drives today, sales today.
 - Follow-ups completed vs due vs missed.
-- Optional automatic email to managers/GM at close of business.
+- Automatic email to sales managers and the GM at close of business (time set in Admin).
 
 ### Month-to-date and year-to-date
 - **Enquiries**, **test drives**, **sales**, and **lost**, broken down by location, brand, salesperson, source and model.
@@ -177,7 +189,6 @@ All reports respect the user's scope (a salesperson sees their own, a manager se
 - **Conversion rate = enquiries sold ÷ enquiries.** Example: a salesperson with 60 enquiries who has sold 20 of them has a **33% conversion rate**. Shown per salesperson, sales manager team, brand, location and the whole dealership, for the month and the year, compared with the same period last month/year.
 - **Test drive, trade-in and finance rates:** the % of enquiries with each ticked, plus conversion for test-drive vs no-test-drive enquiries.
 - **Postcode map/table:** where customers come from, by site and brand (useful for marketing).
-- **Test-drive rate** and **test-drive → sale rate**.
 - **Lost reasons** breakdown.
 - **Follow-up compliance**: % of follow-ups done on time, per salesperson.
 - **Most-enquired models** per brand.
@@ -195,19 +206,26 @@ The app is built once and can run in either of these setups. Only configuration 
 |---|---|---|
 | Where it runs | A small PC/mini-server or NAS on the dealership network | Google Cloud Run (app) + Cloud SQL Postgres or a managed database |
 | Access | Inside the dealership Wi-Fi/network; multi-site needs a VPN or a secure tunnel (e.g. Tailscale / Cloudflare Tunnel) | Any device with internet, over HTTPS |
-| Login | Username/password | Username/password **and/or** Google sign-in (restricted to `@sunco…` Workspace accounts) |
+| Login | Username/password | Username/password (no Google Workspace needed) |
 | Cost | Hardware you may already have; ~$0/month | Typically low (tens of dollars/month at this scale) |
-| Backups | Must be set up (nightly copy to another drive or cloud) | Automatic managed backups |
+| Backups | Must be set up (nightly copy to another drive or cloud) | Automatic managed backups, plus the CRM's own backups (see below) |
 | Maintenance | Someone on site restarts or updates it | Mostly hands-off |
 | Risk | PC failure or power outage = downtime | Depends on internet access |
 
 **Recommendation: option B (Google Cloud).** With four sites spread from Caloundra to Hervey Bay, one central server that all of them reach over HTTPS is simpler and more reliable than a server at one site plus VPN links to the other three. Development and the pilot can still run locally first. The database layer will support both SQLite (local) and Postgres (cloud) so moving between them is a configuration change.
 
-> "Google API" note: Google Sheets/Apps Script could technically be the backend, but it brings back the problems you're trying to escape (no real permissions per row, easy to over-type, slow with many users). Google Cloud hosting + Google sign-in gives you the "Google" convenience without those limits.
+> **Note on Google:** Google Cloud only needs an ordinary Google account for billing. It does **not** require Google Workspace. Google Sheets/Apps Script as the back end is not recommended: it brings back the over-typing and lack of per-row permissions. If preferred, the same app runs on any Australian-region cloud host (e.g. AWS Sydney, Azure Australia East, or an Australian VPS) instead.
+
+### Backups (all enquiries are kept permanently)
+- **Nothing is ever deleted.** Enquiries can only be closed (Sold/Lost) or marked *Duplicate/Invalid*, which hides them from reports but keeps them. Every change is recorded in the audit log, so the earlier value can always be seen.
+- **Automatic nightly backup** of the whole database, kept for 30 daily + 12 monthly copies, stored separately from the server (e.g. a cloud storage bucket, or another drive if hosted locally).
+- **"Back up now" button** in Admin that downloads a full backup file, plus a **full Excel/CSV export** of every enquiry for a human-readable copy.
+- **Restore** from any backup in Admin (admin only, with a confirmation step). Restores are tested as part of go-live.
+- **Backup status** shown in Admin (last successful backup, size). If a nightly backup fails, an email alert goes to the admin.
 
 ### Privacy and security (customer data)
-- Customer names, phones and emails are personal information under the Australian Privacy Act. We will use HTTPS only, hashed passwords, per-user logins, no shared PIN, an audit log of edits/deletes/exports, and automatic backups.
-- Admin setting for data retention (e.g. anonymise Lost enquiries after N years).
+- Customer names, postcodes, phones and emails are personal information under the Australian Privacy Act. We will use HTTPS only, hashed passwords, per-user logins, no shared PIN, an audit log of edits/exports/restores, encrypted backups, and data stored in Australia.
+- **Retention:** all enquiries are kept permanently (your decision). If a customer asks to be removed, the GM/admin can blank out their contact details while keeping the enquiry for reporting.
 
 ---
 
@@ -220,7 +238,8 @@ The app is built once and can run in either of these setups. Only configuration 
 - **Sales managers:** add or remove sales managers, choose their site(s) and tick the brands they manage. Removing a manager doesn't delete anything: their salespeople and enquiries stay, and can be moved to another manager.
 - **Users:** add/disable, set role, set home location, assign franchises (with "whole location" / "whole brand" shortcuts), reset password, reassign all of a departing salesperson's open enquiries in one action.
 - **Lists:** sources, lost reasons, status labels (labels only; the pipeline logic stays fixed).
-- **Settings:** follow-up escalation days, stale-enquiry days, daily email send time, time zone.
+- **Settings:** follow-up escalation days, stale-enquiry days, email send times, email sender settings, time zone (Australia/Brisbane).
+- **Backups:** last backup status, "Back up now", download, restore.
 - **Audit log:** who changed what, and when.
 
 ### Initial setup (seeded, all editable later)
@@ -279,12 +298,12 @@ audit_log      (id, user_id, action, entity, entity_id, before, after, created_a
 | Phase | Scope | Outcome |
 |---|---|---|
 | **0. Foundations** (~1 week) | New data model, migrations, proper auth (no hard-coded secrets/PIN), roles + brand/location scoping enforced server-side, seed brands/models/locations | Secure base to build on |
-| **1. Core logging** (~1–2 weeks) | Today screen, New/Edit Enquiry form with locked-down dropdowns, My Enquiries list, duplicate check, activity history, mobile/PWA layout | Salespeople can replace the spreadsheet for new walk-ins |
-| **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, push + email digests, manager escalation | Nothing falls through the cracks |
+| **1. Core logging** (~1–2 weeks) | Today screen, New/Edit Enquiry form with locked-down dropdowns, My Enquiries list, duplicate check, activity history, phone / tablet / desktop layouts | Salespeople can replace the spreadsheet for new walk-ins |
+| **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, email reminders and digests, manager escalation | Nothing falls through the cracks |
 | **3. Reporting** (~1 week) | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
-| **4. Admin & branding** (~1 week) | Full admin screens (brands, models, users, locations, lists, branding, settings, audit log) | Self-service changes, no developer needed |
-| **5. Migration & pilot** (~1–2 weeks) | Excel import tool (open enquiries + optional history, each brand tab mapped to its franchise), pilot at one location or with one brand team, fixes from feedback | Proven with real users |
-| **6. Go-live** | Hosting setup (local or Google Cloud), backups, training, spreadsheet cut-over date | Whole dealership on the CRM |
+| **4. Admin & branding** (~1 week) | Full admin screens (brands, models, locations, sales managers, users, lists, branding, settings, audit log, backups & restore) | Self-service changes, no developer needed |
+| **5. Migration & pilot** (~1–2 weeks) | Excel import tool (open enquiries + optional history, each brand tab mapped to its franchise), pilot at **Caloundra** (all 10 Caloundra brands), fixes from feedback | Proven with real users |
+| **6. Go-live** | Hosting setup, backup + restore test, training, switch on Maroochydore, Kingaroy and Hervey Bay, spreadsheet cut-over date | Whole dealership (all 4 sites, 21 brands) on the CRM |
 
 Timelines are rough working estimates and depend on answers to §12.
 
@@ -294,15 +313,15 @@ Timelines are rough working estimates and depend on answers to §12.
 
 1. **Locations and brands:** ✅ Confirmed. 4 locations, 21 brands, 33 brand-location combinations (see §9).
 2. **People:** ✅ Assume at least one sales manager per site; more can be added in Admin with their own brands. Exact numbers not needed yet.
-3. **Hosting:** do staff need access from outside the dealership (home, other sites)? Does Sunco use **Google Workspace** (for Google sign-in) or Microsoft 365?
-4. **Devices:** will staff mostly use their phones, desk PCs or showroom tablets?
+3. **Hosting / login:** ✅ No Google Workspace, so the CRM has its own logins. Cloud hosting recommended for 4-site access (see §8); final choice of provider before go-live.
+4. **Devices:** ✅ Phone, tablet and desk PC, all equally supported (see §5).
 5. **Spreadsheet columns:** ✅ Confirmed (see §4). A sample copy with customer details removed would still help when building the import, to check the date and Yes/No formats.
 6. **Conversion definition:** ✅ Enquiries sold ÷ enquiries (e.g. 20 sold from 60 = 33%), counted against the month the enquiry was entered (see §10).
 7. **Used cars:** do you want to link to a stock number/stock list, or just make + model?
-8. **Notifications:** email, phone push, or both? Should managers get a daily end-of-day email automatically?
-9. **Rollout scope:** all 21 brands are set up from day one. Should the pilot and first rollout cover only the Caloundra brands you manage directly (Hyundai, Nissan, GAC, JMC, Leapmotor, Jeep, Chery, LDV, MG, Used Cars), with the other sites' managers brought on afterwards?
-10. **Brand spelling:** confirm display names "Chery", "Leapmotor", "GMSV" and "GWM" (or "GWM Haval"). Any can be renamed in Admin.
-11. **Data retention:** how long should customer details be kept on Lost enquiries?
+8. **Notifications:** ✅ Email reminders. **Still needed before go-live:** which email account/domain the reminders should be sent from.
+9. **Rollout scope:** ✅ Full build for all 4 sites and 21 brands; pilot at Caloundra first.
+10. **Brand spelling:** ✅ "GMSV" and "GWM" exactly. "Chery" and "Leapmotor" assumed (renameable in Admin).
+11. **Data retention:** ✅ Keep all enquiries permanently, with nightly backups and manual backup/restore (see §8).
 
 ---
 
