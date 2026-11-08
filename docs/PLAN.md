@@ -1,6 +1,6 @@
 # Sunco Motors Walk-In CRM — Project Plan
 
-**Status:** Requirements confirmed, ready to build (full build, piloted at Caloundra first). Nothing has been built yet.
+**Status:** Requirements confirmed. Phase 0 (foundations) is built; phase 1 (core logging screens) is next. Full build, piloted at Caloundra first.
 **Goal:** Replace the walk-in tracking Excel workbook (one tab per brand, carried over to a new tab each month) with a small CRM built for Sunco Motors. Sales staff need to use it every day, so it has to be quicker than the spreadsheet.
 
 ---
@@ -280,26 +280,31 @@ This is only a starting setup. Everything here can be changed in the Admin porta
 
 ## 10. Data model (simplified)
 
+As built in `src/migrations/001_initial.sql`:
+
 ```
-locations      (id, name, active)
-brands         (id, name, colour, sort_order, active)
-models         (id, brand_id, name, sort_order, active)
-variants       (id, model_id, name, active)                -- optional
-users          (id, name, username, email, password_hash, role, active, is_admin)
-franchises     (id, location_id, brand_id, active)          -- which brands each site sells
-users          += home_location_id
-user_franchises(user_id, franchise_id)                      -- what each user can see/log
-lookup_values  (id, list_type[source|lost_reason], label, sort_order, active)
-customers      (id, name, postcode, phone, email, created_at)        -- enables duplicate detection
-enquiries      (id, customer_id, franchise_id, model_id, variant_id,
-                salesperson_id, source_id, lost_reason_id,
-                test_drive, trade_in, finance, outcome[open|sold|lost], sold_at, next_followup_at,
-                created_at, closed_at, created_by)
-activities     (id, enquiry_id, user_id, type[note|call|sms|status_change|followup_done],
-                body, created_at)
-settings       (key, value)                                 -- branding, thresholds
-audit_log      (id, user_id, action, entity, entity_id, before, after, created_at)
+locations       (id, name, sort_order, active)
+brands          (id, name, colour, is_used, sort_order, active)       -- is_used = Used Cars
+franchises      (id, location_id, brand_id, active)                    -- which brands each site sells
+models          (id, brand_id, name, sort_order, active)
+used_makes      (id, name, brand_id?, active)                          -- brand_id reuses that brand's model list
+used_models     (id, make_id, name, active)                            -- extra used-only models
+users           (id, name, username, email, password_hash, role, is_admin, home_location_id,
+                 active, must_change_password, token_version)
+user_franchises (user_id, franchise_id)                                -- what each user can see/log
+lookup_values   (id, list_type[source|lost_reason], label, sort_order, active)
+enquiries       (id, franchise_id, salesperson_id,
+                 customer_name, postcode, phone, email,
+                 model_id | used_make_id + (used_model_id | used_extra_model_id | used_model_other), stock_number,
+                 source_id, test_drive, trade_in, finance,
+                 outcome[open|sold|lost], lost_reason_id, sold_at, closed_at, next_followup_at,
+                 is_invalid, invalid_reason, entry_date, entry_month, created_by, created_at, updated_at)
+activities      (id, enquiry_id, user_id, type, body, created_at)      -- comments, calls, status changes
+settings        (key, value)                                           -- branding, thresholds, time zone
+audit_log       (id, user_id, action, entity, entity_id, before_json, after_json, created_at)
 ```
+
+Customer details are stored on each enquiry rather than in a separate customers table; the duplicate check searches open enquiries by phone/email instead. Optional model variants/trims were left out of v1 and can be added later.
 
 **Conversion (agreed):** enquiries sold ÷ enquiries. For a month, it's counted against the enquiries **entered that month** (so October's figure keeps rising if October enquiries sell in November). A separate **"cars sold this month"** count, by sale date, is shown next to it so month-end sales totals still line up.
 
@@ -309,7 +314,7 @@ audit_log      (id, user_id, action, entity, entity_id, before, after, created_a
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **0. Foundations** (~1 week) | New data model, migrations, proper auth (no hard-coded secrets/PIN), roles + brand/location scoping enforced server-side, seed brands/models/locations | Secure base to build on |
+| **0. Foundations** ✅ built | New data model, migrations, proper auth (no hard-coded secrets/PIN), roles + brand/location scoping enforced server-side, seed brands/models/locations | Secure base to build on |
 | **1. Core logging** (~1–2 weeks) | Today screen, New/Edit Enquiry form with locked-down dropdowns, My Enquiries list, duplicate check, activity history, phone / tablet / desktop layouts | Salespeople can replace the spreadsheet for new walk-ins |
 | **2. Follow-ups** (~1 week) | Next-follow-up logic, overdue states, quick-action buttons, email reminders and digests, manager escalation | Nothing falls through the cracks |
 | **3. Reporting** (~1 week) | Daily summary, MTD/YTD dashboards, conversion/test-drive/lost-reason reports, CSV/Excel export, end-of-day email | Management visibility without month-end tabs |
