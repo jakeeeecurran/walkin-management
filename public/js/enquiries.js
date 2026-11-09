@@ -79,6 +79,7 @@
         h('a', { class: 'new-cta', href: '#/new' }, h('div', null, h('b', null, 'New walk-in'), h('span', null, 'Log a customer in under 30 seconds')), h('span', { class: 'plus', 'aria-hidden': 'true' }, '+')),
         h('div', { class: 'stat-row' }, stats)
       ),
+      CRM.isManager() ? h('a', { class: 'meeting-cta', href: '#/meeting' }, CRM.icon('meeting'), h('div', null, h('b', null, 'Morning meeting'), h('span', null, 'Hit list, yesterday’s results and today’s follow-ups')), CRM.icon('arrow')) : null,
       day ? dailySummary(day) : null,
       toApprove.length ? h('div', { class: 'approvals-card' }, section(CRM.isManager() ? 'Waiting for your approval' : 'Awaiting approval', toApprove, pending.total, 'pending', '', '')) : null,
       gm

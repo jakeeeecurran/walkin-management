@@ -759,3 +759,45 @@ a.glance-tile:hover { border-color: var(--primary-line); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .leader.place-1 .rank { color: var(--accent); } }
 :root[data-theme="dark"] .leader.place-1 .rank { color: var(--accent); }
 .today-note { margin: -4px 0 16px; }
+
+/* ---------- Morning meeting ---------- */
+.meeting-cta { display: flex; align-items: center; gap: 14px; padding: 14px 18px; margin-bottom: 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow); }
+.meeting-cta:hover { border-color: var(--primary-line); }
+.meeting-cta > svg:first-child { width: 22px; height: 22px; color: var(--primary-text); }
+.meeting-cta > div { flex: 1; display: grid; gap: 2px; }
+.meeting-cta span { color: var(--muted); font-size: 0.86rem; }
+.meeting-cta > svg:last-child { width: 18px; height: 18px; color: var(--muted); }
+.meeting .board-tools button svg { width: 16px; height: 16px; }
+.meeting-body { transition: opacity 0.15s; }
+.meeting-body.refreshing { opacity: 0.6; }
+.meet-top { margin-bottom: 16px; }
+.meet-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.meet-num { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border); }
+.meet-num b { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.meet-num span { font-size: 0.85rem; font-weight: 600; color: var(--text-2); }
+.meet-num small { font-size: 0.75rem; color: var(--muted); }
+.meet-list h3 { font-size: 0.85rem; margin: 12px 0 4px; color: var(--text-2); }
+.meet-list ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 0.9rem; }
+.hit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hit { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); text-decoration: none; }
+.hit:hover { border-color: var(--primary-line); }
+.hit-rank { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); font-weight: 800; font-size: 0.85rem; color: var(--text-2); }
+.hit-main { display: grid; gap: 4px; min-width: 0; }
+.hit-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-3); color: var(--text-2); }
+.tag-due { background: var(--primary-soft); color: var(--primary-text); }
+.tag-late { background: var(--warning-soft); color: var(--warning); }
+.tag-hot { margin-left: 6px; background: var(--primary-soft); color: var(--primary-text); }
+.hit-note { font-size: 0.85rem; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hit-who { display: grid; justify-items: end; gap: 2px; text-align: right; }
+.meet-people { display: grid; gap: 14px; }
+@media (min-width: 900px) { .meet-people { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); } }
+.meet-person h3 { font-size: 0.95rem; margin: 0 0 6px; }
+.meet-person ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.9rem; }
+@media (max-width: 560px) { .hit { grid-template-columns: 26px 1fr; } .hit-who { grid-column: 2; justify-items: start; text-align: left; grid-auto-flow: column; gap: 8px; } }
+@media print {
+  .sidenav, #nav, #tabbar, .topbar, .no-print, .demo-badge, .toasts { display: none !important; }
+  .shell { display: block !important; }
+  .card { box-shadow: none; break-inside: avoid; }
+  body { background: #fff; }
+}

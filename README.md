@@ -28,6 +28,11 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
     - The current month is shown by day. Choosing more months, up to a year, shows one point per month.
     - Bubbles show each brand's share of enquiries.
 - **Today at a glance (managers):** today's walk-ins, test drives, sales, lost, follow-ups done, approvals waiting and overdue, split by salesperson (or by site for the GM).
+- **Morning meeting (sales managers and GM):**
+  - Yesterday's results (or the last trading day) and the month so far.
+  - A hit list of the 10 hottest open customers, with the last note on each.
+  - Round the room, with each salesperson's follow-ups, hot customers and sales.
+  - Today's follow-ups by salesperson. Printable.
 - **Sales board (general manager only):**
   - Every car sold today: the time, salesperson, brand and model, site, customer, stock number and who approved it.
   - Leaderboards for today and the month, and sales this month by brand.

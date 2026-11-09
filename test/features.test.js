@@ -146,6 +146,31 @@ describe('reports', () => {
     assert.ok(gmView.rows.some((r) => r.label === 'Hervey Bay'), 'every site is listed');
   });
 
+  test('the morning meeting gives managers a hit list, yesterday and today’s follow-ups', async () => {
+    assert.equal((await sam.get('/api/reports/meeting')).status, 403);
+    const hot = await enquiry(kim, { customer_name: 'Hot Prospect', test_drive: true, finance: true, next_followup_at: today, comment: 'Wants it before Christmas' });
+    const cold = await enquiry(kim, { customer_name: 'Just Looking', next_followup_at: addDays(today, 10) });
+    const y = await enquiry(sam, { customer_name: 'Bought Yesterday' });
+    t.db.prepare('UPDATE enquiries SET entry_date = ?, entry_month = ? WHERE id = ?').run(addDays(today, -1), addDays(today, -1).slice(0, 7), y.id);
+    await manager.patch(`/api/enquiries/${y.id}`, { outcome: 'sold' });
+    t.db.prepare('UPDATE enquiries SET sold_date = ? WHERE id = ?').run(addDays(today, -1), y.id);
+
+    const m = (await manager.get('/api/reports/meeting')).body;
+    assert.equal(m.date, today);
+    assert.ok(m.yesterday.walk_ins >= 1);
+    assert.ok(m.yesterday.sold.some((x) => x.customer_name === 'Bought Yesterday'));
+    const h = m.hit_list.find((x) => x.id === hot.id);
+    assert.ok(h, 'a recent test drive with finance, due today, is on the hit list');
+    assert.ok(h.reasons.includes('Test drive') && h.reasons.includes('Due today'));
+    assert.ok(!m.hit_list.some((x) => x.id === cold.id), 'a cold enquiry is not');
+    const kimDue = m.due_today.find((g) => g.name === 'Kim');
+    assert.ok(kimDue.items.some((x) => x.id === hot.id));
+    assert.ok(m.people.some((p) => p.name === 'Kim' && p.hot >= 1));
+    assert.equal(m.show_late, true);
+    const g = (await gm.get('/api/reports/meeting')).body;
+    assert.equal(g.show_late, false, 'the GM view leaves out late follow-ups');
+  });
+
   test('the sales board is for the general manager only and lists who sold what today', async () => {
     assert.equal((await manager.get('/api/reports/sales-board')).status, 403);
     assert.equal((await sam.get('/api/reports/sales-board')).status, 403);

@@ -57,7 +57,7 @@ function filters(db, user, f) {
 }
 
 const ROWS = `
-  SELECT e.id, e.entry_date, e.outcome, e.test_drive, e.trade_in, e.finance, e.postcode, e.customer_name,
+  SELECT e.id, e.entry_date, e.outcome, e.closed_at, e.sold_at, e.test_drive, e.trade_in, e.finance, e.postcode, e.customer_name,
          e.salesperson_id, sp.name AS salesperson, fr.location_id, l.name AS location, fr.brand_id, b.name AS brand,
          COALESCE(m.name, CASE WHEN e.used_make_id IS NOT NULL THEN um.name || ' ' || COALESCE(ulm.name, uxm.name, e.used_model_other) END, 'Not recorded') AS vehicle,
          COALESCE(src.label, 'Not recorded') AS source, lr.label AS lost_reason, e.next_followup_at
@@ -431,4 +431,120 @@ function salesBoard(db, user, opts = {}) {
   };
 }
 
-module.exports = { summary, periodRange, trends, daily, salesBoard };
+// ---------- Morning meeting (managers) ----------
+// Everything to talk about first thing: yesterday's results, the month so far, a ranked hit
+// list of the hottest open enquiries, each salesperson's day, and today's follow-ups.
+function meeting(db, user, opts = {}) {
+  const timeZone = getSetting(db, 'timezone', 'Australia/Brisbane');
+  const today = localDate(new Date(), timeZone);
+  const f = filters(db, user, { location_id: opts.location_id });
+  const isGm = scope.hasFullAccess(user);
+  // "Yesterday" is the last day anything happened (up to 3 days back), so a Monday meeting
+  // shows Saturday if the yard was shut on Sunday.
+  let yesterday = addDays(today, -1);
+  for (let back = 1; back <= 3; back++) {
+    const d = addDays(today, -back);
+    const n = db.prepare(`SELECT COUNT(*) AS n FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id WHERE ${f.sql} AND (e.entry_date = ? OR e.sold_date = ?)`).get(...f.params, d, d).n;
+    if (n) { yesterday = d; break; }
+  }
+  const escalationDays = Number(getSetting(db, 'followup.escalation_days', '3')) || 3;
+
+  // Yesterday
+  const y = db.prepare(`${ROWS} WHERE ${f.sql} AND e.entry_date = ?`).all(...f.params, yesterday);
+  const soldRows = (from, to) =>
+    db.prepare(`${ROWS} WHERE ${f.sql} AND e.outcome = 'sold' AND e.sold_date BETWEEN ? AND ? ORDER BY e.sold_at`).all(...f.params, from, to);
+  const soldYesterday = soldRows(yesterday, yesterday);
+  const since = new Date(Date.now() - 3 * 86400e3).toISOString();
+  const lostYesterday = db
+    .prepare(`${ROWS} WHERE ${f.sql} AND e.outcome = 'lost' AND e.closed_at >= ?`)
+    .all(...f.params, since)
+    .filter((r) => r.closed_at && localDate(new Date(r.closed_at), timeZone) === yesterday);
+
+  // Month so far, and the same point last month
+  const month = summary(db, user, { period: 'month', date: today, location_id: opts.location_id });
+
+  // Open enquiries, scored for the hit list
+  const open = db
+    .prepare(`${ROWS} WHERE ${f.sql} AND e.outcome = 'open' AND e.pending_outcome IS NULL ORDER BY e.next_followup_at`)
+    .all(...f.params);
+  const daysAgo = (d) => Math.round((Date.parse(today) - Date.parse(d)) / 86400e3);
+  const scored = open.map((r) => {
+    const reasons = [];
+    let score = 0;
+    if (r.test_drive === 1) { score += 3; reasons.push('Test drive'); }
+    if (r.finance === 1) { score += 1; reasons.push('Finance'); }
+    if (r.trade_in === 1) { score += 1; reasons.push('Trade-in'); }
+    const age = daysAgo(r.entry_date);
+    if (age <= 7) { score += 2; reasons.push(age === 0 ? 'New today' : 'New this week'); }
+    else if (age > 45) score -= 2;
+    if (r.next_followup_at === today) { score += 2; reasons.push('Due today'); }
+    else if (r.next_followup_at && r.next_followup_at < today) { score += 1; reasons.push(`${daysAgo(r.next_followup_at)} days late`); }
+    return { r, score, reasons };
+  });
+  const hit = scored.filter((x) => x.score >= 4).sort((a, b) => b.score - a.score || String(a.r.next_followup_at).localeCompare(String(b.r.next_followup_at))).slice(0, 10);
+  const lastNote = db.prepare("SELECT body, local_date FROM activities WHERE enquiry_id = ? AND body IS NOT NULL AND body <> '' AND type IN ('comment', 'call', 'email', 'sms', 'followup_done', 'created') ORDER BY id DESC LIMIT 1");
+  const slimHit = (x) => {
+    const n = lastNote.get(x.r.id);
+    return { ...slim(x.r), trade_in: x.r.trade_in === 1, finance: x.r.finance === 1, reasons: x.reasons, score: x.score, last_note: n ? n.body.slice(0, 160) : null, last_note_date: n ? n.local_date : null };
+  };
+
+  // Round the room: one row per salesperson in scope
+  const people = new Map();
+  const ids = scope.franchiseIds(db, user);
+  const team = ids === null
+    ? db.prepare("SELECT id, name, home_location_id FROM users WHERE active = 1 AND role = 'salesperson'").all()
+    : ids.length
+      ? db.prepare(`SELECT DISTINCT u.id, u.name, u.home_location_id FROM users u JOIN user_franchises uf ON uf.user_id = u.id WHERE u.active = 1 AND u.role = 'salesperson' AND uf.franchise_id IN (${ids.map(() => '?').join(', ')})`).all(...ids)
+      : [];
+  const locName = new Map(db.prepare('SELECT id, name FROM locations').all().map((l) => [l.id, l.name]));
+  for (const u of team) {
+    if (opts.location_id && u.home_location_id && u.home_location_id !== Number(opts.location_id)) continue;
+    people.set(u.id, { id: u.id, name: u.name, location: locName.get(u.home_location_id) || null, due_today: 0, late: 0, hot: 0, walk_ins_yesterday: 0, sold_month: 0, open: 0 });
+  }
+  const person = (r) => people.get(r.salesperson_id) || (people.set(r.salesperson_id, { id: r.salesperson_id, name: r.salesperson, location: r.location, due_today: 0, late: 0, hot: 0, walk_ins_yesterday: 0, sold_month: 0, open: 0 }), people.get(r.salesperson_id));
+  for (const x of scored) {
+    const p = person(x.r);
+    p.open++;
+    if (x.r.next_followup_at && x.r.next_followup_at <= today) p.due_today++;
+    if (x.r.next_followup_at && x.r.next_followup_at <= addDays(today, -escalationDays)) p.late++;
+    if (x.score >= 4) p.hot++;
+  }
+  for (const r of y) person(r).walk_ins_yesterday++;
+  for (const r of soldRows(`${today.slice(0, 7)}-01`, today)) person(r).sold_month++;
+
+  // Today's follow-ups, by salesperson
+  const dueToday = scored.filter((x) => x.r.next_followup_at && x.r.next_followup_at <= today);
+  const byPerson = new Map();
+  for (const x of dueToday) {
+    if (!byPerson.has(x.r.salesperson_id)) byPerson.set(x.r.salesperson_id, { id: x.r.salesperson_id, name: x.r.salesperson, items: [] });
+    byPerson.get(x.r.salesperson_id).items.push({ ...slim(x.r), hot: x.score >= 4 });
+  }
+
+  const approvals = db.prepare(`SELECT COUNT(*) AS n FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id WHERE ${f.sql} AND e.pending_outcome IS NOT NULL`).get(...f.params).n;
+  const lostOut = lostYesterday.map((r) => ({ ...slim(r), lost_reason: r.lost_reason || 'Not recorded' }));
+
+  return {
+    date: today,
+    yesterday: {
+      date: yesterday,
+      walk_ins: y.length,
+      test_drives: y.filter((r) => r.test_drive === 1).length,
+      sold: soldYesterday.map(slim),
+      lost: lostOut,
+    },
+    month: {
+      enquiries: month.totals.enquiries,
+      sold: month.totals.cars_sold,
+      conversion: month.totals.conversion,
+      sold_last_month_same_point: month.previous.cars_sold,
+    },
+    approvals,
+    hit_list: hit.map(slimHit),
+    people: [...people.values()].map((p) => (isGm ? { ...p, late: undefined } : p)).sort((a, b) => b.hot - a.hot || b.due_today - a.due_today || a.name.localeCompare(b.name)),
+    show_late: !isGm,
+    due_today: [...byPerson.values()].sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)),
+    due_today_total: dueToday.length,
+  };
+}
+
+module.exports = { summary, periodRange, trends, daily, salesBoard, meeting };

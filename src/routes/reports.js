@@ -2,7 +2,7 @@ const express = require('express');
 const v = require('../lib/validate');
 const scope = require('../lib/scope');
 const { forbidden, badRequest } = require('../lib/http');
-const { summary, trends, daily, salesBoard } = require('../services/reports');
+const { summary, trends, daily, salesBoard, meeting } = require('../services/reports');
 const { audit } = require('../lib/audit');
 const { formatPhone } = require('../lib/validate');
 
@@ -45,6 +45,12 @@ module.exports = function reportRoutes({ db }) {
   router.get('/daily', (req, res) => {
     if (!scope.isManager(req.user)) throw forbidden('Only managers can see the daily summary');
     res.json(daily(db, req.user));
+  });
+
+  // Morning meeting: sales managers and the general manager.
+  router.get('/meeting', (req, res) => {
+    if (!scope.isManager(req.user)) throw forbidden('Only managers can see the morning meeting');
+    res.json(meeting(db, req.user, { location_id: v.id(req.query.location_id, 'location_id') }));
   });
 
   // Sales board: general manager (and admins) only.

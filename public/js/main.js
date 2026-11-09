@@ -43,6 +43,7 @@
     document.getElementById('user-chip').title = `${me.name} – account`;
     const items = [
       ['today', '#/today', 'Today', 'today'],
+      CRM.isManager() ? ['meeting', '#/meeting', 'Morning meeting', 'meeting'] : null,
       ['enquiries', '#/enquiries', 'Enquiries', 'list'],
       ['new', '#/new', 'New walk-in', 'plus'],
       ['reports', '#/reports', 'Reports', 'chart'],
@@ -52,7 +53,7 @@
       ['account', '#/account', 'Account', 'user'],
     ].filter(Boolean);
     const link = ([key, href, label, icon]) => h('a', { href, dataset: { nav: key } }, CRM.icon(icon), label);
-    const work = items.filter(([k]) => ['today', 'enquiries', 'new', 'reports', 'sales-board'].includes(k));
+    const work = items.filter(([k]) => ['today', 'meeting', 'enquiries', 'new', 'reports', 'sales-board'].includes(k));
     const manage = items.filter(([k]) => ['team', 'admin'].includes(k));
     document.getElementById('nav').replaceChildren(
       h('div', { class: 'nav-label' }, 'Sales'),
@@ -82,6 +83,7 @@
         body: h(
           'div',
           { class: 'stack' },
+          CRM.isManager() ? go('#/meeting', 'Morning meeting', 'meeting') : null,
           CRM.isFull() ? go('#/sales-board', 'Sales board', 'trophy') : null,
           CRM.isManager() ? go('#/team', 'Team', 'team') : null,
           CRM.isFull() ? go('#/admin', 'Admin', 'cog') : null,
@@ -95,7 +97,7 @@
 
   CRM.markNav = (path) => {
     const key = path.startsWith('/enquiries') ? 'enquiries' : path.split('/')[1];
-    const moreKeys = ['team', 'admin', 'account', 'help', 'sales-board'];
+    const moreKeys = ['team', 'admin', 'account', 'help', 'sales-board', 'meeting'];
     document.querySelectorAll('[data-nav]').forEach((a) => {
       const active = a.dataset.nav === key || (a.dataset.nav === 'more' && moreKeys.includes(key));
       a.classList.toggle('active', active);

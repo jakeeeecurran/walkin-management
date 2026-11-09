@@ -475,6 +475,16 @@ async function managerDeck() {
   ]);
   s.addNotes('Today at a glance sits at the top of Today for sales managers and the general manager. The general manager sees it split by site. Sold counts approved sales only. Full report opens Reports for today.');
 
+  s = d.content('Welcome', 'Your morning meeting');
+  await d.leftShot(s, shot('m-hitlist-crop'), 'Morning meeting hit list');
+  await d.points(s, [
+    { head: 'Yesterday and the month', text: 'Who sold what, what was lost and why.' },
+    { head: 'Hit list', text: 'The 10 hottest customers, with the last note on each.' },
+    { head: 'Round the room', text: 'Each salesperson’s follow-ups, hot customers and sales.' },
+    { head: 'Today’s follow-ups', text: 'Who each person should contact. Tap Print for paper.' },
+  ], { numbered: true });
+  s.addNotes('Open Morning meeting (in the menu, or the link on Today) before the sales meeting and work down the page. The hit list ranks open customers by test drive, finance, trade-in, how new they are and whether they are due today. On a Monday it shows the last trading day instead of Sunday.');
+
   d.section('Approvals', 'Approving sold and lost', 'Nothing closes until you say so',
     'When a salesperson marks an enquiry Sold or Lost it goes to pending. The sales manager for that brand and site approves or declines it, always with a reason.');
 
@@ -510,7 +520,7 @@ async function managerDeck() {
 
   s = d.content('Using it properly', 'Your 10-minute daily routine');
   await d.cards(s, [
-    { head: 'Read Today at a glance', text: 'Any faded rows? Do the walk-ins match the floor?' },
+    { head: 'Run the morning meeting', text: 'Work down the hit list and round the room.' },
     { head: 'Clear approvals', text: 'Approve or decline everything waiting, with a reason.' },
     { head: 'Check running late', text: 'Filter by salesperson and ask about anything 3+ days late.' },
     { head: 'Spot-check notes', text: 'Open two or three enquiries and read the history.' },

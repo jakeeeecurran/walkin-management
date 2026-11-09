@@ -476,6 +476,76 @@
     };
   }
 
+  // Same rules as the server: managers only.
+  function meeting(user, q) {
+    if (!isManager(user)) fail(403, 'Only managers can see the morning meeting');
+    const t = today();
+    const esc = Number(setting('followup.escalation_days', '3'));
+    const scoped = db.enquiries.filter((e) => !e.is_invalid && canView(user, e)).map((e) => present(e, user)).filter((e) => !q.location_id || e.location_id === Number(q.location_id));
+    let yday = addDays(t, -1);
+    for (let back = 1; back <= 3; back++) {
+      const d = addDays(t, -back);
+      if (scoped.some((e) => e.entry_date === d || e.sold_date === d)) { yday = d; break; }
+    }
+    const slimE = (e) => ({ id: e.id, customer_name: e.customer_name, entry_date: e.entry_date, location: e.location, brand: e.brand, vehicle: e.vehicle || 'Not recorded', salesperson: e.salesperson, outcome: e.outcome, test_drive: e.test_drive, next_followup_at: e.next_followup_at });
+    const y = scoped.filter((e) => e.entry_date === yday);
+    const soldY = scoped.filter((e) => e.outcome === 'sold' && e.sold_date === yday);
+    const lostY = scoped.filter((e) => e.outcome === 'lost' && e.closed_at && localDay(e.closed_at) === yday);
+    const s = summary(user, { period: 'month', date: t, location_id: q.location_id });
+    const daysAgo = (d) => Math.round((Date.parse(t) - Date.parse(d)) / 86400e3);
+    const scored = scoped
+      .filter((e) => e.outcome === 'open' && !e.pending_outcome)
+      .sort((a, b) => String(a.next_followup_at).localeCompare(String(b.next_followup_at)))
+      .map((e) => {
+        const reasons = [];
+        let score = 0;
+        if (e.test_drive) { score += 3; reasons.push('Test drive'); }
+        if (e.finance) { score += 1; reasons.push('Finance'); }
+        if (e.trade_in) { score += 1; reasons.push('Trade-in'); }
+        const age = daysAgo(e.entry_date);
+        if (age <= 7) { score += 2; reasons.push(age === 0 ? 'New today' : 'New this week'); } else if (age > 45) score -= 2;
+        if (e.next_followup_at === t) { score += 2; reasons.push('Due today'); } else if (e.next_followup_at && e.next_followup_at < t) { score += 1; reasons.push(`${daysAgo(e.next_followup_at)} days late`); }
+        return { e, score, reasons };
+      });
+    const noteOf = (id) => db.activities.filter((a) => a.enquiry_id === id && a.body && ['comment', 'call', 'email', 'sms', 'followup_done', 'created'].includes(a.type)).sort((a, b) => b.id - a.id)[0];
+    const hit = scored.filter((x) => x.score >= 4).sort((a, b) => b.score - a.score || String(a.e.next_followup_at).localeCompare(String(b.e.next_followup_at))).slice(0, 10)
+      .map((x) => { const n = noteOf(x.e.id); return { ...slimE(x.e), trade_in: x.e.trade_in, finance: x.e.finance, reasons: x.reasons, score: x.score, last_note: n ? n.body.slice(0, 160) : null, last_note_date: n ? n.local_date : null }; });
+    const mine = full(user) ? null : new Set(db.user_franchises.filter((x) => x.user_id === user.id).map((x) => x.franchise_id));
+    const people = new Map();
+    for (const u of db.users.filter((x) => x.active && x.role === 'salesperson' && (!mine || db.user_franchises.some((uf) => uf.user_id === x.id && mine.has(uf.franchise_id))))) {
+      if (q.location_id && u.home_location_id && u.home_location_id !== Number(q.location_id)) continue;
+      people.set(u.id, { id: u.id, name: u.name, location: u.home_location_id ? byId(db.locations, u.home_location_id)?.name : null, due_today: 0, late: 0, hot: 0, walk_ins_yesterday: 0, sold_month: 0, open: 0 });
+    }
+    const person = (e) => { if (!people.has(e.salesperson_id)) people.set(e.salesperson_id, { id: e.salesperson_id, name: e.salesperson, location: e.location, due_today: 0, late: 0, hot: 0, walk_ins_yesterday: 0, sold_month: 0, open: 0 }); return people.get(e.salesperson_id); };
+    for (const x of scored) {
+      const p = person(x.e);
+      p.open++;
+      if (x.e.next_followup_at && x.e.next_followup_at <= t) p.due_today++;
+      if (x.e.next_followup_at && x.e.next_followup_at <= addDays(t, -esc)) p.late++;
+      if (x.score >= 4) p.hot++;
+    }
+    for (const e of y) person(e).walk_ins_yesterday++;
+    for (const e of scoped.filter((x) => x.outcome === 'sold' && x.sold_date && x.sold_date.slice(0, 7) === t.slice(0, 7) && x.sold_date <= t)) person(e).sold_month++;
+    const due = scored.filter((x) => x.e.next_followup_at && x.e.next_followup_at <= t);
+    const byPerson = new Map();
+    for (const x of due) {
+      if (!byPerson.has(x.e.salesperson_id)) byPerson.set(x.e.salesperson_id, { id: x.e.salesperson_id, name: x.e.salesperson, items: [] });
+      byPerson.get(x.e.salesperson_id).items.push({ ...slimE(x.e), hot: x.score >= 4 });
+    }
+    const gmView = full(user);
+    return {
+      date: t,
+      yesterday: { date: yday, walk_ins: y.length, test_drives: y.filter((e) => e.test_drive).length, sold: soldY.map(slimE), lost: lostY.map((e) => ({ ...slimE(e), lost_reason: e.lost_reason || 'Not recorded' })) },
+      month: { enquiries: s.totals.enquiries, sold: s.totals.cars_sold, conversion: s.totals.conversion, sold_last_month_same_point: s.previous.cars_sold },
+      approvals: scoped.filter((e) => e.pending_outcome).length,
+      hit_list: hit,
+      people: [...people.values()].map((p) => (gmView ? { ...p, late: undefined } : p)).sort((a, b) => b.hot - a.hot || b.due_today - a.due_today || a.name.localeCompare(b.name)),
+      show_late: !gmView,
+      due_today: [...byPerson.values()].sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)),
+      due_today_total: due.length,
+    };
+  }
+
   // Same rules as the server: GM/admin only.
   function salesBoard(user, q) {
     if (!full(user)) fail(403, 'Only the general manager can see the sales board');
@@ -884,6 +954,7 @@
   on('GET', /^\/api\/reports\/summary$/, (q) => summary(meReady(), q));
   on('GET', /^\/api\/reports\/trends$/, (q) => trends(meReady(), q));
   on('GET', /^\/api\/reports\/daily$/, () => daily(meReady()));
+  on('GET', /^\/api\/reports\/meeting$/, (q) => meeting(meReady(), q));
   on('GET', /^\/api\/reports\/sales-board$/, (q) => salesBoard(meReady(), q));
 
   // Team
