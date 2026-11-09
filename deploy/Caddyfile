@@ -1,0 +1,9 @@
+# CRM_DOMAIN comes from .env, e.g. crm.suncomotors.com.au
+#
+# Online (public DNS name): Caddy gets and renews a free Let's Encrypt certificate itself.
+# Internal-only name (e.g. crm.sunco.local): add the line "tls internal" inside the block,
+# then install Caddy's root certificate on staff devices (see docs/hosting/LOCAL-SERVER.md).
+{$CRM_DOMAIN} {
+	encode gzip
+	reverse_proxy crm:3000
+}
