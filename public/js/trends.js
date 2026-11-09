@@ -1,19 +1,23 @@
 // Brand trends (general manager only): enquiries, test drives and cars sold per brand.
-// One month -> a point per day; several months -> a point per month. Up to five brands are
-// compared at once; each keeps its colour while it stays selected. The bubbles show each
-// brand's share of all enquiries in the chosen months.
+// One month -> a point per day; several months -> a point per month.
+// Any number of brands can be chosen:
+//   - "Together": up to five brands on shared charts, one colour per brand (a brand keeps
+//     its colour while it stays selected).
+//   - "Per brand": one small chart per brand, any number of brands, the three measures in
+//     the same three colours on every chart and one shared scale so brands compare fairly.
+// The bubbles show each brand's share of all enquiries in the chosen months.
 (function () {
   const CRM = window.CRM;
   const { h } = CRM;
-  const MAX = 5;
+  const TOGETHER_MAX = 5;
   const METRICS = [
-    { key: 'enquiries', title: 'Enquiries', short: 'Enq' },
-    { key: 'test_drives', title: 'Test drives', short: 'TD' },
-    { key: 'sold', title: 'Cars sold', short: 'Sold' },
+    { key: 'enquiries', title: 'Enquiries', short: 'Enq', slot: 1 },
+    { key: 'test_drives', title: 'Test drives', short: 'TD', slot: 2 },
+    { key: 'sold', title: 'Cars sold', short: 'Sold', slot: 3 },
   ];
 
   // Kept while the app is open, so the choice survives moving between pages.
-  const state = { months: null, selected: [], slots: new Map(), touched: false };
+  const state = { months: null, selected: [], slots: new Map(), touched: false, view: 'together' };
 
   const s = (tag, attrs, ...kids) => h(tag, { ...attrs, svg: true }, ...kids);
   const shortMonth = (ym, withYear) => new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', month: 'short', ...(withYear ? { year: '2-digit' } : {}) }).format(new Date(ym + '-01T00:00:00Z'));
@@ -22,44 +26,53 @@
     const [y, m] = CRM.today().slice(0, 7).split('-').map(Number);
     return Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - 1 - i, 1)).toISOString().slice(0, 7));
   };
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
 
   function periodLabel(months) {
     const t = CRM.today().slice(0, 7);
     if (months.length === 1) return `${CRM.fmtMonth(months[0])}${months[0] === t ? ' to date' : ''} · by day`;
     const sorted = [...months].sort();
-    const contiguous = sorted.every((m, i) => i === 0 || lastMonthsFrom(sorted[i - 1], m));
+    const contiguous = sorted.every((m, i) => i === 0 || nextMonth(sorted[i - 1]) === m);
     const range = contiguous ? `${shortMonth(sorted[0], true)} – ${shortMonth(sorted.at(-1), true)}` : `${sorted.length} chosen months`;
     return `${range} · ${sorted.length} months · by month`;
   }
-  function lastMonthsFrom(a, b) {
+  function nextMonth(a) {
     const [y, m] = a.split('-').map(Number);
-    return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7) === b;
+    return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
   }
 
-  // ---------- Colour slots: a brand keeps its colour while selected ----------
-  function select(id) {
-    if (state.selected.includes(id) || state.selected.length >= MAX) return;
+  // ---------- Selection and colour slots ----------
+  // Colours only apply in the "Together" view. A brand keeps its slot while selected;
+  // brands without one get the lowest free slot when the view needs colours.
+  function giveSlots() {
     const used = new Set(state.slots.values());
-    let slot = 1;
-    while (used.has(slot)) slot++;
-    state.slots.set(id, slot);
-    state.selected.push(id);
+    for (const id of state.selected) {
+      if (state.slots.has(id)) continue;
+      let slot = 1;
+      while (used.has(slot)) slot++;
+      if (slot > TOGETHER_MAX) break;
+      state.slots.set(id, slot);
+      used.add(slot);
+    }
+  }
+  function select(id) {
+    if (!state.selected.includes(id)) state.selected.push(id);
   }
   function unselect(id) {
     state.selected = state.selected.filter((x) => x !== id);
     state.slots.delete(id);
   }
+  const view = () => (state.selected.length > TOGETHER_MAX ? 'perbrand' : state.view);
 
   // ---------- Scales ----------
-  function niceTicks(max) {
+  function niceTicks(max, count = 4) {
     if (max <= 0) return [0, 1];
-    const raw = max / 4;
+    const raw = max / count;
     const mag = 10 ** Math.floor(Math.log10(raw));
-    const step = [1, 2, 5, 10].map((x) => x * mag).find((x) => x >= raw);
-    const s2 = Math.max(1, step);
-    const top = Math.ceil(max / s2) * s2;
+    const step = Math.max(1, [1, 2, 5, 10].map((x) => x * mag).find((x) => x >= raw));
+    const top = Math.ceil(max / step) * step;
     const ticks = [];
-    for (let v = 0; v <= top + 1e-9; v += s2) ticks.push(Math.round(v));
+    for (let v = 0; v <= top + 1e-9; v += step) ticks.push(Math.round(v));
     return ticks;
   }
 
@@ -69,17 +82,20 @@
     const sub = h('p', { class: 'muted small trend-sub' });
     const monthsBtn = h('button', { type: 'button', class: 'filter-btn', onclick: () => pickMonths() }, CRM.icon('today'), h('span', null, 'Months'));
     const chips = h('div', { class: 'chips trend-brands', role: 'group', 'aria-label': 'Brands to compare' });
-    const hint = h('p', { class: 'muted small' });
+    const quick = h('div', { class: 'trend-quick' });
+    const hint = h('p', { class: 'muted small trend-hint' });
+    const viewSeg = h('div', { class: 'segmented trend-view', role: 'group', 'aria-label': 'Chart layout' });
+    const legend = h('div', { class: 'trend-legend' });
     const charts = h('div', { class: 'trend-charts' });
     const bubbles = h('figure', { class: 'trend-bubbles' });
     const table = h('div', { class: 'trend-table' });
-    const body = h('div', { class: 'trend-body' }, charts, h('div', { class: 'trend-lower' }, bubbles, table));
+    const body = h('div', { class: 'trend-body' }, h('div', { class: 'trend-bar' }, viewSeg, legend), charts, h('div', { class: 'trend-lower' }, bubbles, table));
     const card = h(
       'section',
       { class: 'card trends' },
       h('div', { class: 'card-head' }, h('div', null, h('h2', null, 'Brand trends'), sub), monthsBtn),
       chips,
-      hint,
+      h('div', { class: 'trend-pickrow' }, quick, hint),
       body,
       tooltip
     );
@@ -106,24 +122,33 @@
     }
 
     const names = new Map();
+    // Selected brands with their figures, busiest first (zeros if quiet in these months).
     function series() {
-      return state.selected.map((id) => {
-        const b = data.brands.find((x) => x.id === id);
-        if (b) names.set(id, b.name);
-        const zero = data.buckets.map(() => 0);
-        return { id, name: names.get(id) || 'Brand', slot: state.slots.get(id), enquiries: b?.enquiries || zero, test_drives: b?.test_drives || zero, sold: b?.sold || zero, b };
-      });
+      const order = new Map(data.brands.map((b, i) => [b.id, i]));
+      return [...state.selected]
+        .sort((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9))
+        .map((id) => {
+          const b = data.brands.find((x) => x.id === id);
+          if (b) names.set(id, b.name);
+          const zero = data.buckets.map(() => 0);
+          return { id, name: names.get(id) || 'Brand', slot: state.slots.get(id), enquiries: b?.enquiries || zero, test_drives: b?.test_drives || zero, sold: b?.sold || zero, b };
+        });
     }
 
-    function toggle(id) {
+    function changed() {
       state.touched = true;
-      if (state.selected.includes(id)) unselect(id);
-      else if (state.selected.length < MAX) select(id);
-      else return CRM.toast(`Compare up to ${MAX} brands at a time`);
+      hideHover();
       draw();
+    }
+    function toggle(id) {
+      if (state.selected.includes(id)) unselect(id);
+      else select(id);
+      changed();
     }
 
     function draw() {
+      if (view() === 'together') giveSlots();
+      const together = view() === 'together';
       sub.textContent = periodLabel(data.months);
       const list = [...data.brands];
       for (const id of state.selected) if (!list.some((b) => b.id === id)) list.push({ id, name: names.get(id) || 'Brand', total_enquiries: 0 });
@@ -132,17 +157,44 @@
           const on = state.selected.includes(b.id);
           return h(
             'button',
-            { type: 'button', class: 'chip small', 'aria-pressed': String(on), disabled: !on && state.selected.length >= MAX, onclick: () => toggle(b.id) },
-            on ? h('span', { class: `key s${state.slots.get(b.id)}`, 'aria-hidden': 'true' }) : null,
+            { type: 'button', class: 'chip small', 'aria-pressed': String(on), onclick: () => toggle(b.id) },
+            on && together ? h('span', { class: `key s${state.slots.get(b.id)}`, 'aria-hidden': 'true' }) : on ? CRM.icon('check') : null,
             b.name
           );
         })
       );
+      const ids = data.brands.map((b) => b.id);
+      const all = ids.length > 0 && ids.every((id) => state.selected.includes(id));
+      quick.replaceChildren(
+        h('button', { type: 'button', class: 'btn-sm btn-ghost', disabled: all, onclick: () => { ids.forEach(select); changed(); } }, 'All brands'),
+        h('button', { type: 'button', class: 'btn-sm btn-ghost', onclick: () => { state.selected = []; state.slots.clear(); ids.slice(0, 5).forEach(select); changed(); } }, 'Top 5'),
+        h('button', { type: 'button', class: 'btn-sm btn-ghost', disabled: !state.selected.length, onclick: () => { state.selected = []; state.slots.clear(); changed(); } }, 'Clear')
+      );
+      const n = state.selected.length;
       hint.textContent = !data.brands.length
         ? 'No enquiries in these months.'
-        : state.selected.length >= MAX
-          ? `Comparing ${MAX} brands, the most at once. Tap one to remove it.`
-          : 'Tap brands to compare them (up to 5).';
+        : !n
+          ? 'Tap brands to compare them.'
+          : `${n} brand${n === 1 ? '' : 's'} chosen.${n > TOGETHER_MAX ? ` Over ${TOGETHER_MAX}, each brand gets its own chart.` : ''}`;
+      viewSeg.replaceChildren(
+        ...[
+          ['together', 'Together'],
+          ['perbrand', 'Per brand'],
+        ].map(([v, label]) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              'aria-pressed': String(view() === v),
+              disabled: v === 'together' && n > TOGETHER_MAX,
+              title: v === 'together' && n > TOGETHER_MAX ? `Together shows up to ${TOGETHER_MAX} brands` : null,
+              onclick: () => { state.view = v; hideHover(); draw(); },
+            },
+            label
+          )
+        )
+      );
+      legend.replaceChildren(...(together ? [] : METRICS.map((m) => h('span', null, h('span', { class: `key s${m.slot}`, 'aria-hidden': 'true' }), m.title))));
       drawCharts();
       drawBubbles();
       drawTable();
@@ -150,62 +202,106 @@
 
     // ---------- Line charts ----------
     function drawCharts() {
-      const width = Math.max(280, charts.clientWidth || card.clientWidth - 40 || 640);
+      const width = Math.max(260, charts.clientWidth || card.clientWidth - 40 || 640);
       lastWidth = width;
       const ser = series();
-      charts.replaceChildren(...METRICS.map((m) => lineChart(m, ser, width)));
+      charts.classList.toggle('per-brand', view() === 'perbrand');
+      if (!ser.length) {
+        charts.replaceChildren(CRM.empty('Choose brands to see their trends', 'Tap the brands above, or All brands.', 'chart'));
+        return;
+      }
+      if (view() === 'together') {
+        const labelled = ser.length <= 4 && width >= 420;
+        charts.replaceChildren(
+          ...METRICS.map((m) => {
+            const lines = ser.map((sr) => ({ cls: `s${sr.slot}`, name: sr.name, values: sr[m.key] }));
+            const total = sum(lines.map((l) => sum(l.values)));
+            return lineChart({
+              W: width,
+              H: 170,
+              lines,
+              labelled,
+              aria: `${m.title} per ${data.granularity} for ${ser.map((x) => x.name).join(', ')}. Values are in the table below.`,
+              caption: [h('strong', null, m.title), h('span', { class: 'muted' }, ` ${total} in total`)],
+              tip: (i) => tipTable(i, ser),
+            });
+          })
+        );
+      } else {
+        // One chart per brand, all on the same scale.
+        const gap = 16;
+        const cols = Math.max(1, Math.floor((width + gap) / (300 + gap)));
+        const pw = Math.floor((width - gap * (cols - 1)) / cols) - 22; // less the panel border and padding
+        const max = Math.max(1, ...ser.flatMap((sr) => METRICS.flatMap((m) => sr[m.key])));
+        charts.replaceChildren(
+          ...ser.map((sr) => {
+            const b = sr.b;
+            return lineChart({
+              W: pw,
+              H: 132,
+              max,
+              compact: true,
+              lines: METRICS.map((m) => ({ cls: `s${m.slot}`, name: m.title, values: sr[m.key] })),
+              aria: `${sr.name}: enquiries, test drives and cars sold per ${data.granularity}. Values are in the table below.`,
+              caption: [
+                h('strong', null, sr.name),
+                h('span', { class: 'muted' }, b ? ` ${b.total_enquiries} enq · ${b.total_test_drives} TD · ${b.total_sold} sold · ${CRM.pct(b.conversion)}` : ' no enquiries'),
+              ],
+              tip: (i) => tipTable(i, [sr], true),
+            });
+          })
+        );
+      }
       if (hoverIdx != null) showHover(hoverIdx);
     }
 
-    function lineChart(metric, ser, W) {
+    // A line chart. lines: [{ cls, name, values }]. max: shared top value (optional).
+    function lineChart({ W, H, lines, max, labelled, compact, aria, caption, tip }) {
       const n = data.buckets.length;
-      const labelled = ser.length > 0 && ser.length <= 4 && W >= 420;
-      const H = 170;
-      const m = { l: 34, r: labelled ? 104 : 14, t: 12, b: 26 };
+      const m = { l: 30, r: labelled ? 104 : compact ? 8 : 14, t: 10, b: 24 };
       const pw = W - m.l - m.r;
       const ph = H - m.t - m.b;
-      const max = Math.max(1, ...ser.flatMap((x) => x[metric.key]));
-      const ticks = niceTicks(max);
+      const ticks = niceTicks(max ?? Math.max(1, ...lines.flatMap((l) => l.values)), compact ? 2 : 4);
       const top = ticks.at(-1);
       const x = (i) => m.l + (n === 1 ? pw / 2 : (i * pw) / (n - 1));
       const y = (v) => m.t + ph - (v / top) * ph;
 
-      const svg = s('svg', { class: 'trend-svg', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', tabindex: '0', 'aria-label': `${metric.title} per ${data.granularity} for ${ser.map((x) => x.name).join(', ') || 'no brands'}. Values are in the table below.` });
+      const svg = s('svg', { class: 'trend-svg', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', tabindex: '0', 'aria-label': aria });
       for (const tv of ticks) {
         svg.append(s('line', { class: tv === 0 ? 'axis' : 'grid', x1: m.l, x2: W - m.r, y1: y(tv), y2: y(tv) }));
-        svg.append(s('text', { class: 'tick', x: m.l - 8, y: y(tv) + 4, 'text-anchor': 'end' }, tv));
+        svg.append(s('text', { class: 'tick', x: m.l - 7, y: y(tv) + 4, 'text-anchor': 'end' }, tv));
       }
-      // X labels: days 1, 8, 15, 22, 29; months all (or every other when tight).
-      const every = data.granularity === 'day' ? 7 : Math.ceil(n / Math.max(1, Math.floor(pw / 46)));
+      // X labels spaced to the width: days 1, 8, 15…; months as many as fit.
+      const room = Math.max(1, Math.floor(pw / (data.granularity === 'day' ? 34 : 44)));
+      const every = data.granularity === 'day' ? Math.max(7, Math.ceil(n / room / 7) * 7) : Math.ceil(n / room);
       data.buckets.forEach((k, i) => {
         if (i % every !== 0 && i !== n - 1) return;
         if (i === n - 1 && i % every !== 0 && n > 1 && x(i) - x(i - (i % every)) < 30) return;
         const label = data.granularity === 'day' ? String(Number(k.slice(8))) : shortMonth(k, i === 0 || k.endsWith('-01'));
-        svg.append(s('text', { class: 'tick', x: x(i), y: H - 8, 'text-anchor': 'middle' }, label));
+        svg.append(s('text', { class: 'tick', x: x(i), y: H - 7, 'text-anchor': 'middle' }, label));
       });
 
       const cross = s('line', { class: 'cross', x1: 0, x2: 0, y1: m.t, y2: m.t + ph, visibility: 'hidden' });
       svg.append(cross);
       const dotsAt = [];
-      for (const sr of ser) {
-        const vals = sr[metric.key];
-        const d = vals.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-        svg.append(s('path', { class: `line s${sr.slot}`, d }));
-        if (n <= 12) vals.forEach((v, i) => svg.append(s('circle', { class: `dot s${sr.slot}`, cx: x(i), cy: y(v), r: 4 })));
-        const hd = s('circle', { class: `dot hot s${sr.slot}`, r: 5, visibility: 'hidden' });
+      for (const l of lines) {
+        const d = l.values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+        svg.append(s('path', { class: `line ${l.cls}`, d }));
+        if (n <= 12 && pw / Math.max(1, n) >= 14) l.values.forEach((v, i) => svg.append(s('circle', { class: `dot ${l.cls}`, cx: x(i), cy: y(v), r: compact ? 3 : 4 })));
+        const hd = s('circle', { class: `dot hot ${l.cls}`, r: 5, visibility: 'hidden' });
         svg.append(hd);
-        dotsAt.push({ el: hd, vals });
+        dotsAt.push({ el: hd, vals: l.values });
       }
       // Direct labels at the line ends, nudged apart so they never overlap.
       if (labelled) {
-        const ends = ser.map((sr) => ({ sr, y: y(sr[metric.key][n - 1]) })).sort((a, b) => a.y - b.y);
+        const ends = lines.map((l) => ({ l, y: y(l.values[n - 1]) })).sort((a, b) => a.y - b.y);
         for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14;
         const over = ends.length ? ends.at(-1).y - (m.t + ph) : 0;
         if (over > 0) ends.forEach((e) => (e.y -= over));
         for (const e of ends) {
-          svg.append(s('line', { class: `key-line s${e.sr.slot}`, x1: W - m.r + 8, x2: W - m.r + 18, y1: e.y, y2: e.y }));
+          svg.append(s('line', { class: `key-line ${e.l.cls}`, x1: W - m.r + 8, x2: W - m.r + 18, y1: e.y, y2: e.y }));
           const t = s('text', { class: 'end-label', x: W - m.r + 22, y: e.y + 4 });
-          t.textContent = e.sr.name.length > 12 ? e.sr.name.slice(0, 11) + '…' : e.sr.name;
+          t.textContent = e.l.name.length > 12 ? e.l.name.slice(0, 11) + '…' : e.l.name;
           svg.append(t);
         }
       }
@@ -216,17 +312,19 @@
         const px = ((ev.clientX - r.left) / r.width) * W;
         return n === 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round(((px - m.l) / pw) * (n - 1))));
       };
-      hit.addEventListener('pointermove', (ev) => { hoverIdx = idxAt(ev); showHover(hoverIdx, ev); });
-      hit.addEventListener('pointerdown', (ev) => { hoverIdx = idxAt(ev); showHover(hoverIdx, ev); });
+      const move = (ev) => { hoverIdx = idxAt(ev); showHover(hoverIdx, ev, svg); };
+      hit.addEventListener('pointermove', move);
+      hit.addEventListener('pointerdown', move);
       hit.addEventListener('pointerleave', (ev) => { if (ev.pointerType === 'mouse') hideHover(); });
       svg.append(hit);
       svg.addEventListener('keydown', (ev) => {
         if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
         ev.preventDefault();
         hoverIdx = Math.max(0, Math.min(n - 1, (hoverIdx ?? n - 1) + (ev.key === 'ArrowRight' ? 1 : -1)));
-        showHover(hoverIdx);
+        showHover(hoverIdx, null, svg);
       });
       svg.addEventListener('blur', hideHover);
+      svg._tip = tip;
       svg._hover = (i) => {
         if (i == null) {
           cross.setAttribute('visibility', 'hidden');
@@ -243,27 +341,41 @@
         }
       };
       svg._x = (i) => x(i) / W;
-
-      const total = ser.reduce((a, sr) => a + sr[metric.key].reduce((p, q) => p + q, 0), 0);
-      return h('figure', { class: 'trend-chart' }, h('figcaption', null, h('strong', null, metric.title), h('span', { class: 'muted' }, ` ${total} in total`)), svg);
+      return h('figure', { class: 'trend-chart' }, h('figcaption', null, caption), svg);
     }
 
-    function showHover(i, ev) {
-      const ser = series();
-      charts.querySelectorAll('svg').forEach((svg) => svg._hover?.(i));
-      if (!ser.length) return hideTip();
+    // Tooltip body: every chosen brand (or one brand) with all three measures.
+    function tipTable(i, ser, single) {
       const k = data.buckets[i];
       const when = data.granularity === 'day' ? dayLabel(k) : CRM.fmtMonth(k);
-      const rows = ser.map((sr) =>
-        h('tr', null, h('td', null, h('span', { class: `key s${sr.slot}`, 'aria-hidden': 'true' }), sr.name), ...METRICS.map((mm) => h('td', { class: 'num' }, h('strong', null, sr[mm.key][i]))))
-      );
-      tooltip.replaceChildren(
+      if (single) {
+        const sr = ser[0];
+        return [
+          h('div', { class: 'tip-title' }, `${sr.name} · ${when}`),
+          h('table', null, h('tbody', null, METRICS.map((mm) => h('tr', null, h('td', null, h('span', { class: `key s${mm.slot}`, 'aria-hidden': 'true' }), mm.title), h('td', { class: 'num' }, h('strong', null, sr[mm.key][i])))))),
+        ];
+      }
+      return [
         h('div', { class: 'tip-title' }, when),
-        h('table', null, h('thead', null, h('tr', null, h('th', null, ''), ...METRICS.map((mm) => h('th', { class: 'num' }, mm.short)))), h('tbody', null, rows))
-      );
+        h(
+          'table',
+          null,
+          h('thead', null, h('tr', null, h('th', null, ''), ...METRICS.map((mm) => h('th', { class: 'num' }, mm.short)))),
+          h('tbody', null, ser.map((sr) => h('tr', null, h('td', null, h('span', { class: `key s${sr.slot}`, 'aria-hidden': 'true' }), sr.name), ...METRICS.map((mm) => h('td', { class: 'num' }, h('strong', null, sr[mm.key][i]))))))
+        ),
+      ];
+    }
+
+    // The crosshair moves on every chart together; the tooltip belongs to the chart pointed at.
+    function showHover(i, ev, from) {
+      const svgs = [...charts.querySelectorAll('svg')];
+      if (!svgs.length) return;
+      svgs.forEach((svg) => svg._hover?.(i));
+      const svg = from && svgs.includes(from) ? from : svgs[0];
+      if (!svg._tip) return hideTip();
+      tooltip.replaceChildren(...svg._tip(i));
       tooltip.hidden = false;
       const cr = card.getBoundingClientRect();
-      const svg = charts.querySelector('svg');
       const sr = svg.getBoundingClientRect();
       const px = ev ? ev.clientX - cr.left : sr.left - cr.left + svg._x(i) * sr.width;
       const py = ev ? ev.clientY - cr.top : sr.top - cr.top + 20;
@@ -288,12 +400,12 @@
         bubbles.replaceChildren(h('figcaption', null, h('strong', null, 'Share of enquiries')), CRM.empty('No enquiries in these months', null, 'inbox'));
         return;
       }
-      // Ten bubbles at most: the rest fold into "Other".
+      // Every brand gets a bubble so any of them can be tapped (more than 24 fold into "Other").
       let items = brands.map((b) => ({ id: b.id, name: b.name, n: b.total_enquiries, share: b.share }));
-      if (items.length > 10) {
-        const rest = items.slice(9);
+      if (items.length > 24) {
+        const rest = items.slice(23);
         const n = rest.reduce((a, b) => a + b.n, 0);
-        items = [...items.slice(0, 9), { id: null, name: `Other (${rest.length})`, n, share: Math.round((n / data.total_enquiries) * 1000) / 10 }];
+        items = [...items.slice(0, 23), { id: null, name: `Other (${rest.length})`, n, share: Math.round((n / data.total_enquiries) * 1000) / 10 }];
       }
       const placed = pack(items.map((it) => Math.sqrt(it.n)));
       const W = Math.max(260, bubbles.clientWidth || 360);
@@ -312,8 +424,9 @@
         const cx = ox + p.x * k;
         const cy = oy + p.y * k;
         const r = Math.max(3, p.r * k - 1);
-        const slot = it.id != null && state.selected.includes(it.id) ? state.slots.get(it.id) : null;
-        const g = s('g', { class: ['bubble', slot ? `s${slot}` : 'plain', it.id != null && 'pick'].filter(Boolean).join(' '), tabindex: it.id != null ? '0' : null, role: it.id != null ? 'button' : null, 'aria-label': `${it.name}: ${it.share}% of enquiries (${it.n})${it.id != null ? (slot ? ', comparing' : ', tap to compare') : ''}` });
+        const on = it.id != null && state.selected.includes(it.id);
+        const slot = on && view() === 'together' ? state.slots.get(it.id) : null;
+        const g = s('g', { class: ['bubble', slot ? `s${slot}` : on ? 'chosen' : 'plain', it.id != null && 'pick'].filter(Boolean).join(' '), tabindex: it.id != null ? '0' : null, role: it.id != null ? 'button' : null, 'aria-label': `${it.name}: ${it.share}% of enquiries (${it.n})${it.id != null ? (on ? ', comparing' : ', tap to compare') : ''}` });
         g.append(s('circle', { cx, cy, r: Math.max(r, 12), class: 'bubble-hit' }));
         g.append(s('circle', { cx, cy, r }));
         if (r >= 28) {
@@ -346,7 +459,7 @@
       bubbles.replaceChildren(
         h('figcaption', null, h('strong', null, 'Share of enquiries'), h('span', { class: 'muted' }, ` ${data.total_enquiries} in total`)),
         svg,
-        h('p', { class: 'muted small' }, 'Bigger bubble, bigger share. Coloured bubbles are the brands you are comparing; tap a bubble to add or remove it.')
+        h('p', { class: 'muted small' }, 'Bigger bubble, bigger share. Filled bubbles are the brands you are comparing; tap a bubble to add or remove it.')
       );
     }
 
@@ -390,7 +503,7 @@
                 return h(
                   'tr',
                   { class: on ? 'picked' : null },
-                  h('td', null, h('span', { class: on ? `key s${state.slots.get(b.id)}` : 'key none', 'aria-hidden': 'true' }), b.name),
+                  h('td', null, h('span', { class: on && view() === 'together' ? `key s${state.slots.get(b.id)}` : on ? 'key chosen' : 'key none', 'aria-hidden': 'true' }), b.name),
                   h('td', { class: 'num' }, b.total_enquiries),
                   h('td', { class: 'num hide-sm' }, b.total_test_drives),
                   h('td', { class: 'num' }, b.total_sold),

@@ -643,3 +643,19 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 .trend-tip td:first-child, .trend-tip th:first-child { padding-left: 0; text-align: left; color: var(--text-2); }
 .trend-tip td.num strong { font-variant-numeric: tabular-nums; }
 .month-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+.trend-pickrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 4px; }
+.trend-quick { display: flex; gap: 4px; flex-wrap: wrap; }
+.trend-hint { margin: 0; }
+.trend-brands .chip svg { width: 14px; height: 14px; }
+.trend-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; }
+.trend-view { display: inline-grid; width: auto; }
+.trend-view button { min-height: 36px; padding: 0 16px; font-size: 0.875rem; }
+.trend-view button:disabled { opacity: 0.45; cursor: not-allowed; }
+.trend-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8125rem; color: var(--text-2); }
+.trend-legend:empty { display: none; }
+.trend-charts.per-brand { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 16px; row-gap: 12px; }
+.trend-charts.per-brand .trend-chart { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px 6px; }
+.trend-charts.per-brand figcaption { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bubble.chosen circle { fill: var(--primary); }
+.bubble.chosen text { fill: #ffffff; }
+.key.chosen { background: var(--primary); }

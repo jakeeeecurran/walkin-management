@@ -23,7 +23,8 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
   - Overdue (escalated) and stale enquiries.
   - Export to Excel (CSV).
   - **Brand trends (general manager only):**
-    - Enquiries, test drives and cars sold for up to five brands side by side.
+    - Enquiries, test drives and cars sold for any or all brands.
+    - Up to five brands share one chart in brand colours. With more, or by choice, each brand gets its own small chart on a shared scale.
     - The current month is shown by day. Choosing more months, up to a year, shows one point per month.
     - Bubbles show each brand's share of enquiries.
 - **Team:**
