@@ -22,6 +22,10 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
   - Breakdowns by site, brand, salesperson, model, source, lost reason and postcode.
   - Overdue (escalated) and stale enquiries.
   - Export to Excel (CSV).
+  - **Brand trends (general manager only):**
+    - Enquiries, test drives and cars sold for up to five brands side by side.
+    - The current month is shown by day. Choosing more months, up to a year, shows one point per month.
+    - Bubbles show each brand's share of enquiries.
 - **Team:**
   - The GM adds and removes sales managers and salespeople, and ticks which brands at which sites each person works on.
   - Managers add salespeople within their own brands/sites.

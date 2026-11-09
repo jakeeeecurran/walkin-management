@@ -4,7 +4,7 @@
   const CRM = window.CRM;
   const SEED = window.DEMO_DATA;
   const PASSWORD = 'demo-password-123';
-  const STORE = 'sunco-crm-demo-v2';
+  const STORE = 'sunco-crm-demo-v3';
   const TZ = 'Australia/Brisbane';
 
   // ---------- Dates ----------
@@ -428,6 +428,60 @@
     out.sort((a, b) => b.enquiries - a.enquiries || b.sold - a.sold || String(a.label).localeCompare(String(b.label)));
     return limit ? out.slice(0, limit) : out;
   }
+  // Same rules as the server: GM/admin only; one month by day, several months by month.
+  function trends(user, q) {
+    if (!full(user)) fail(403, 'Only the general manager can see brand trends');
+    const t = today();
+    const asked = String(q.months || '').split(',').filter(Boolean);
+    if (asked.length > 24 || asked.some((m) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(m))) fail(400, 'Choose up to 24 months, as YYYY-MM');
+    const months = [...new Set(asked.length ? asked : [t.slice(0, 7)])].filter((m) => m <= t.slice(0, 7)).sort();
+    if (!months.length) fail(400, 'Choose a month that has started');
+    const daily = months.length === 1;
+    let buckets = months;
+    if (daily) {
+      const [y, m] = months[0].split('-').map(Number);
+      const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      const end = months[0] === t.slice(0, 7) ? t : monthEnd;
+      buckets = [];
+      for (let d = `${months[0]}-01`; d <= end; d = addDays(d, 1)) buckets.push(d);
+    }
+    const index = new Map(buckets.map((k, i) => [k, i]));
+    const keyOf = (d) => (daily ? d : d.slice(0, 7));
+    const scoped = db.enquiries.filter((e) => !e.is_invalid && canView(user, e)).map((e) => present(e, user)).filter((e) => !q.location_id || e.location_id === Number(q.location_id));
+    const brands = new Map();
+    const brand = (e) => {
+      if (!brands.has(e.brand_id)) {
+        const zero = () => buckets.map(() => 0);
+        brands.set(e.brand_id, { id: e.brand_id, name: e.brand, enquiries: zero(), test_drives: zero(), sold: zero(), total_converted: 0 });
+      }
+      return brands.get(e.brand_id);
+    };
+    for (const e of scoped) {
+      if (months.includes(e.entry_date.slice(0, 7))) {
+        const i = index.get(keyOf(e.entry_date));
+        if (i != null) {
+          const b = brand(e);
+          b.enquiries[i]++;
+          if (e.test_drive) b.test_drives[i]++;
+          if (e.outcome === 'sold') b.total_converted++;
+        }
+      }
+      if (e.outcome === 'sold' && e.sold_date && months.includes(e.sold_date.slice(0, 7))) {
+        const i = index.get(keyOf(e.sold_date));
+        if (i != null) brand(e).sold[i]++;
+      }
+    }
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    const all = [...brands.values()].map((b) => ({ ...b, total_enquiries: sum(b.enquiries), total_test_drives: sum(b.test_drives), total_sold: sum(b.sold) }));
+    const total = sum(all.map((b) => b.total_enquiries));
+    for (const b of all) {
+      b.share = pct(b.total_enquiries, total);
+      b.conversion = pct(b.total_converted, b.total_enquiries);
+    }
+    all.sort((a, b) => b.total_enquiries - a.total_enquiries || b.total_sold - a.total_sold || a.name.localeCompare(b.name));
+    return { granularity: daily ? 'day' : 'month', months, buckets, today: t, total_enquiries: total, brands: all };
+  }
+
   function summary(user, q) {
     const t = today();
     const period = q.period || 'month';
@@ -727,6 +781,7 @@
   });
 
   on('GET', /^\/api\/reports\/summary$/, (q) => summary(meReady(), q));
+  on('GET', /^\/api\/reports\/trends$/, (q) => trends(meReady(), q));
 
   // Team
   on('GET', /^\/api\/users$/, () => {

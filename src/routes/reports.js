@@ -1,8 +1,8 @@
 const express = require('express');
 const v = require('../lib/validate');
 const scope = require('../lib/scope');
-const { forbidden } = require('../lib/http');
-const { summary } = require('../services/reports');
+const { forbidden, badRequest } = require('../lib/http');
+const { summary, trends } = require('../services/reports');
 const { audit } = require('../lib/audit');
 const { formatPhone } = require('../lib/validate');
 
@@ -31,6 +31,14 @@ module.exports = function reportRoutes({ db }) {
 
   router.get('/summary', (req, res) => {
     res.json(summary(db, req.user, readFilters(req.query)));
+  });
+
+  // Brand trends: general manager (and admins) only.
+  router.get('/trends', (req, res) => {
+    if (!scope.hasFullAccess(req.user)) throw forbidden('Only the general manager can see brand trends');
+    const months = String(req.query.months || '').split(',').filter(Boolean);
+    if (months.length > 24 || months.some((m) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(m))) throw badRequest('Choose up to 24 months, as YYYY-MM');
+    res.json(trends(db, req.user, { months, location_id: v.id(req.query.location_id, 'location_id') }));
   });
 
   // Excel-friendly CSV of enquiries in the user's scope (managers and GM).

@@ -13,7 +13,7 @@ const body = html
   .replace(/<script[\s\S]*?<\/script>/g, '')
   .trim();
 const safe = (js) => js.replace(/<\/(script)/gi, '<\\/$1');
-const scripts = ['public/js/theme-boot.js', 'public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/main.js'];
+const scripts = ['public/js/theme-boot.js', 'public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/trends.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/main.js'];
 // Sunco branding (the logo is embedded, as the trial page can't load other files) and a few
 // sold/lost requests waiting for approval, so the approval step can be tried straight away.
 const demo = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
@@ -32,6 +32,73 @@ for (const [user, outcome, reason, note] of requests) {
   if (!e) continue;
   Object.assign(e, { pending_outcome: outcome, pending_lost_reason_id: reason, pending_note: note, pending_by: e.salesperson_id, pending_at: demo.today + 'T01:30:00.000Z', pending_date: demo.today });
   demo.activities.push({ id: Math.max(...demo.activities.map((a) => a.id)) + 1, enquiry_id: e.id, user_id: e.salesperson_id, type: 'approval_requested', body: `${outcome === 'sold' ? 'Marked as sold' : 'Marked as lost (Bought elsewhere)'}. Waiting for sales manager approval. Note: ${note}`, followup_due: null, local_date: demo.today, created_at: demo.today + 'T01:30:00.000Z' });
+}
+// A year of closed history before the sample data starts, so the brand trends have something
+// to show. Deterministic (seeded), with a seasonal pattern and some brands growing faster.
+{
+  let seed = 20261108;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const addDays = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+  const firsts = ['Liam', 'Olivia', 'Noah', 'Charlotte', 'Jack', 'Amelia', 'William', 'Isla', 'Leo', 'Mia', 'Oliver', 'Ava', 'Henry', 'Grace', 'Lucas', 'Chloe', 'Thomas', 'Zoe', 'James', 'Ruby', 'Ethan', 'Sophie', 'Mason', 'Ella', 'Cooper', 'Harper', 'Hudson', 'Matilda'];
+  const lasts = ['Smith', 'Jones', 'Williams', 'Brown', 'Wilson', 'Taylor', 'Johnson', 'White', 'Martin', 'Anderson', 'Thompson', 'Nguyen', 'Walker', 'Harris', 'Lee', 'Ryan', 'Robinson', 'Kelly', 'King', 'Campbell', 'Mitchell', 'Young'];
+  const brandName = (fid) => demo.brands.find((b) => b.id === demo.franchises.find((f) => f.id === fid).brand_id).name;
+  // weight = walk-ins a month at the start; growth = change across the year; conv = share sold.
+  const plan = { MG: [9, 1.1, 0.34], Hyundai: [8, 0.95, 0.38], Nissan: [7, 0.9, 0.33], LDV: [6, 1.05, 0.3], Chery: [4, 1.8, 0.29], Jeep: [4, 0.8, 0.22], Leapmotor: [2, 2.4, 0.25], GAC: [3, 1.5, 0.24], JMC: [3, 1.2, 0.27], 'Used Cars': [7, 1, 0.42] };
+  const season = [0.8, 0.9, 1.0, 1.0, 0.95, 1.25, 0.9, 0.95, 1.0, 1.05, 1.0, 0.75]; // Jan..Dec (EOFY in June)
+  const lostReasons = demo.lookup_values.filter((x) => x.list_type === 'lost_reason').map((x) => x.id);
+  const firstMonth = demo.enquiries.reduce((m, e) => (e.entry_date < m ? e.entry_date : m), demo.today).slice(0, 7);
+  const [fy, fm] = firstMonth.split('-').map(Number);
+  let id = Math.max(...demo.enquiries.map((e) => e.id));
+  const templates = new Map();
+  for (const e of demo.enquiries) if (!templates.has(e.franchise_id)) templates.set(e.franchise_id, e);
+  for (let back = 9; back >= 1; back--) {
+    const start = new Date(Date.UTC(fy, fm - 1 - back, 1));
+    const ym = start.toISOString().slice(0, 7);
+    const days = new Date(Date.UTC(fy, fm - back, 0)).getUTCDate();
+    const progress = (9 - back) / 9;
+    for (const [fid, tpl] of templates) {
+      const p = plan[brandName(fid)];
+      if (!p) continue;
+      const [weight, growth, conv] = p;
+      const n = Math.max(0, Math.round(weight * (1 + (growth - 1) * progress) * season[start.getUTCMonth()] * (0.8 + rnd() * 0.4)));
+      for (let i = 0; i < n; i++) {
+        const entry = `${ym}-${String(1 + Math.floor(rnd() * days)).padStart(2, '0')}`;
+        const sold = rnd() < conv;
+        const closed = addDays(entry, 2 + Math.floor(rnd() * 24));
+        const first = pick(firsts);
+        const last = pick(lasts);
+        demo.enquiries.push({
+          ...tpl,
+          id: ++id,
+          customer_name: `${first} ${last}`,
+          phone: `04${String(Math.floor(rnd() * 1e8)).padStart(8, '0')}`,
+          email: rnd() < 0.5 ? `${first}.${last}@example.com`.toLowerCase() : null,
+          test_drive: rnd() < (sold ? 0.8 : 0.45) ? 1 : 0,
+          trade_in: rnd() < 0.4 ? 1 : 0,
+          finance: rnd() < 0.35 ? 1 : 0,
+          outcome: sold ? 'sold' : 'lost',
+          lost_reason_id: sold ? null : pick(lostReasons),
+          sold_date: sold ? closed : null,
+          sold_at: sold ? `${closed}T03:00:00.000Z` : null,
+          closed_at: `${closed}T03:00:00.000Z`,
+          next_followup_at: null,
+          pending_outcome: null,
+          pending_lost_reason_id: null,
+          pending_note: null,
+          pending_by: null,
+          pending_at: null,
+          pending_date: null,
+          is_invalid: 0,
+          invalid_reason: null,
+          entry_date: entry,
+          entry_month: ym,
+          created_at: `${entry}T01:00:00.000Z`,
+          updated_at: `${closed}T03:00:00.000Z`,
+        });
+      }
+    }
+  }
 }
 const data = JSON.stringify(demo);
 

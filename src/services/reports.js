@@ -210,4 +210,76 @@ function slim(r) {
   };
 }
 
-module.exports = { summary, periodRange };
+// Brand trends for the general manager: enquiries, test drives and cars sold per brand.
+// One month selected -> one point per day of that month (up to today). Several months ->
+// one point per selected month. Enquiries and test drives count by the date the enquiry
+// was entered; cars sold by the date the sale was recorded. Share and conversion cover
+// the whole selection (conversion = enquiries sold ÷ enquiries, as elsewhere).
+function trends(db, user, opts) {
+  const timeZone = getSetting(db, 'timezone', 'Australia/Brisbane');
+  const today = localDate(new Date(), timeZone);
+  const months = [...new Set(opts.months && opts.months.length ? opts.months : [today.slice(0, 7)])].filter((m) => m <= today.slice(0, 7)).sort();
+  if (!months.length) throw Object.assign(new Error('Choose a month that has started'), { status: 400 });
+  const daily = months.length === 1;
+  let buckets;
+  if (daily) {
+    const end = months[0] === today.slice(0, 7) ? today : lastDayOfMonth(months[0]);
+    buckets = [];
+    for (let d = `${months[0]}-01`; d <= end; d = addDays(d, 1)) buckets.push(d);
+  } else {
+    buckets = months;
+  }
+  const index = new Map(buckets.map((k, i) => [k, i]));
+  const keyOf = (date) => (daily ? date : date.slice(0, 7));
+  const f = filters(db, user, { location_id: opts.location_id });
+  const inMonths = (col) => `substr(${col}, 1, 7) IN (${months.map(() => '?').join(', ')})`;
+
+  const brands = new Map();
+  const brand = (id, name) => {
+    if (!brands.has(id)) {
+      const zero = () => buckets.map(() => 0);
+      brands.set(id, { id, name, enquiries: zero(), test_drives: zero(), sold: zero(), total_converted: 0 });
+    }
+    return brands.get(id);
+  };
+  const entered = db
+    .prepare(
+      `SELECT fr.brand_id AS id, b.name, e.entry_date AS date, COUNT(*) AS n,
+              SUM(CASE WHEN e.test_drive = 1 THEN 1 ELSE 0 END) AS td,
+              SUM(CASE WHEN e.outcome = 'sold' THEN 1 ELSE 0 END) AS converted
+       FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id JOIN brands b ON b.id = fr.brand_id
+       WHERE ${f.sql} AND ${inMonths('e.entry_date')} GROUP BY fr.brand_id, e.entry_date`
+    )
+    .all(...f.params, ...months);
+  for (const r of entered) {
+    const i = index.get(keyOf(r.date));
+    if (i == null) continue;
+    const b = brand(r.id, r.name);
+    b.enquiries[i] += r.n;
+    b.test_drives[i] += r.td;
+    b.total_converted += r.converted;
+  }
+  const sold = db
+    .prepare(
+      `SELECT fr.brand_id AS id, b.name, e.sold_date AS date, COUNT(*) AS n
+       FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id JOIN brands b ON b.id = fr.brand_id
+       WHERE ${f.sql} AND e.outcome = 'sold' AND ${inMonths('e.sold_date')} GROUP BY fr.brand_id, e.sold_date`
+    )
+    .all(...f.params, ...months);
+  for (const r of sold) {
+    const i = index.get(keyOf(r.date));
+    if (i != null) brand(r.id, r.name).sold[i] += r.n;
+  }
+
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  const all = [...brands.values()].map((b) => ({ ...b, total_enquiries: sum(b.enquiries), total_test_drives: sum(b.test_drives), total_sold: sum(b.sold) }));
+  const total = sum(all.map((b) => b.total_enquiries));
+  for (const b of all) {
+    b.share = pct(b.total_enquiries, total);
+    b.conversion = pct(b.total_converted, b.total_enquiries);
+  }
+  all.sort((a, b) => b.total_enquiries - a.total_enquiries || b.total_sold - a.total_sold || a.name.localeCompare(b.name));
+  return { granularity: daily ? 'day' : 'month', months, buckets, today, total_enquiries: total, brands: all };
+}
+
+module.exports = { summary, periodRange, trends };

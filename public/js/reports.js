@@ -232,6 +232,9 @@
       h('div', { class: 'report-note' }, moreBtn, h('span', { class: 'muted small' }, 'Conversion = enquiries sold ÷ enquiries entered in the period.')),
     ];
 
+    // Brand trends: general manager (and admins) only. Uses the Site filter; has its own months.
+    if (CRM.isFull() && CRM.brandTrends) out.push(CRM.brandTrends({ location_id: state.location_id, brand_id: state.brand_id }));
+
     if (r.period.type === 'day') {
       out.push(h('section', { class: 'card' }, h('div', { class: 'card-head' }, h('h2', null, 'Walk-ins', h('span', { class: 'count-pill' }, r.enquiries.length))), r.enquiries.length ? enquiryTable(r.enquiries) : CRM.empty('No walk-ins on this day', null, 'inbox')));
     }

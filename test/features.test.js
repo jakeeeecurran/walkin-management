@@ -83,6 +83,50 @@ describe('reports', () => {
     assert.equal(y.period.from, today.slice(0, 4) + '-01-01');
   });
 
+  test('brand trends are for the general manager only: this month by day, or chosen months by month', async () => {
+    assert.equal((await manager.get('/api/reports/trends')).status, 403);
+    assert.equal((await sam.get('/api/reports/trends')).status, 403);
+    assert.equal((await gm.get('/api/reports/trends?months=2026-13')).status, 400);
+
+    const thisMonth = today.slice(0, 7);
+    const back = (n) => { const [y, m] = thisMonth.split('-').map(Number); return new Date(Date.UTC(y, m - 1 - n, 1)).toISOString().slice(0, 7); };
+    const sel = `${back(2)},${thisMonth}`;
+    const before = (await gm.get(`/api/reports/trends?months=${sel}`)).body;
+    const beforeDay = (await gm.get('/api/reports/trends')).body;
+
+    const old = await enquiry(sam, { brand_id: t.ids.brand('Used Cars'), model_id: undefined, used_make: 'Toyota', used_model: 'HiLux', test_drive: true });
+    t.db.prepare('UPDATE enquiries SET entry_date = ?, entry_month = ? WHERE id = ?').run(`${back(2)}-10`, back(2), old.id);
+    await manager.patch(`/api/enquiries/${old.id}`, { outcome: 'sold' }); // sold today
+
+    // Default: the current month, one point per day up to today.
+    const day = (await gm.get('/api/reports/trends')).body;
+    assert.equal(day.granularity, 'day');
+    assert.deepEqual(day.months, [thisMonth]);
+    assert.equal(day.buckets[0], `${thisMonth}-01`);
+    assert.equal(day.buckets.at(-1), today);
+    const usedDay = day.brands.find((b) => b.name === 'Used Cars');
+    const usedDayBefore = beforeDay.brands.find((b) => b.name === 'Used Cars');
+    assert.equal(usedDay.sold.at(-1), (usedDayBefore ? usedDayBefore.sold.at(-1) : 0) + 1, 'sale counted on the day it was sold');
+
+    // Several months: one point per chosen month.
+    const r = (await gm.get(`/api/reports/trends?months=${sel}`)).body;
+    assert.equal(r.granularity, 'month');
+    assert.deepEqual(r.buckets, [back(2), thisMonth]);
+    const used = r.brands.find((b) => b.name === 'Used Cars');
+    const usedBefore = before.brands.find((b) => b.name === 'Used Cars');
+    const at = (b, key, i) => (b ? b[key][i] : 0);
+    assert.equal(used.enquiries[0], at(usedBefore, 'enquiries', 0) + 1, 'enquiry counted in the month it was entered');
+    assert.equal(used.test_drives[0], at(usedBefore, 'test_drives', 0) + 1);
+    assert.equal(used.sold[1], at(usedBefore, 'sold', 1) + 1, 'sale counted in the month it was sold');
+    assert.equal(used.total_converted, (usedBefore ? usedBefore.total_converted : 0) + 1);
+    assert.equal(r.total_enquiries, r.brands.reduce((n, b) => n + b.total_enquiries, 0));
+    const shares = r.brands.reduce((n, b) => n + b.share, 0);
+    assert.ok(Math.abs(shares - 100) < 1, `shares add to 100 (${shares})`);
+
+    const elsewhere = (await gm.get(`/api/reports/trends?months=${sel}&location_id=${t.ids.location('Kingaroy')}`)).body;
+    assert.equal(elsewhere.total_enquiries, 0);
+  });
+
   test('managers can export CSV; salespeople cannot; formulas are neutralised', async () => {
     await enquiry(sam, { customer_name: '=HYPERLINK("x")' });
     assert.equal((await sam.get('/api/reports/export.csv')).status, 403);

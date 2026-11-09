@@ -32,6 +32,8 @@
   --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.16);
   --ring: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
   --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
+  --chart-grid: #e8ebf0; --chart-axis: #cfd5df; --chart-plain: #e3e7ee; --chart-plain-ink: #334155;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -46,6 +48,8 @@
     --text: #e8edf5; --text-2: #c3cbd8; --muted: #8b95a7; --border: #232c3b; --border-strong: #334055;
     --danger: #ff8278; --danger-soft: #34191a; --warning: #f3c058; --warning-soft: #33280f; --good: #5fd38f; --good-soft: #12291c;
     --shadow-sm: none; --shadow: none; --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+    --chart-grid: #222b39; --chart-axis: #334055; --chart-plain: #263041; --chart-plain-ink: #c3cbd8;
     color-scheme: dark;
   }
 }
@@ -60,6 +64,8 @@
   --text: #e8edf5; --text-2: #c3cbd8; --muted: #8b95a7; --border: #232c3b; --border-strong: #334055;
   --danger: #ff8278; --danger-soft: #34191a; --warning: #f3c058; --warning-soft: #33280f; --good: #5fd38f; --good-soft: #12291c;
   --shadow-sm: none; --shadow: none; --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+  --chart-grid: #222b39; --chart-axis: #334055; --chart-plain: #263041; --chart-plain-ink: #c3cbd8;
   color-scheme: dark;
 }
 
@@ -578,3 +584,62 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 .theme-btn:hover { background: var(--surface-3); }
 .theme-btn svg { width: 19px; height: 19px; }
 .topbar-tools { display: flex; align-items: center; gap: 10px; }
+
+/* ---------- Brand trends (general manager) ---------- */
+.trends { position: relative; }
+.trends .card-head { align-items: flex-start; }
+.trend-sub { margin: 4px 0 0; }
+.trend-brands { margin-bottom: 6px; }
+.trend-brands .chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.trend-body { transition: opacity 0.15s; }
+.trend-body.refreshing { opacity: 0.5; }
+.trend-charts { display: grid; gap: 8px; margin-top: 8px; }
+.trend-chart, .trend-bubbles { margin: 0; min-width: 0; }
+.trend-chart figcaption, .trend-bubbles figcaption { font-size: 0.875rem; margin: 6px 0 2px; }
+.trend-svg, .bubble-svg { display: block; max-width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.trend-svg:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
+.bubble.pick:focus { outline: none; }
+.bubble.pick:focus-visible circle:not(.bubble-hit) { stroke: var(--text); stroke-width: 3; }
+.trend-svg .grid { stroke: var(--chart-grid); stroke-width: 1; }
+.trend-svg .axis { stroke: var(--chart-axis); stroke-width: 1; }
+.trend-svg .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.trend-svg .end-label { fill: var(--text-2); font-size: 12px; font-weight: 600; }
+.trend-svg .cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.trend-svg .hit { fill: transparent; cursor: crosshair; }
+.trend-svg .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trend-svg .dot { stroke: var(--surface); stroke-width: 2; }
+.trend-svg .key-line { stroke-width: 2; stroke-linecap: round; }
+.s1 { --c: var(--series-1); } .s2 { --c: var(--series-2); } .s3 { --c: var(--series-3); } .s4 { --c: var(--series-4); } .s5 { --c: var(--series-5); }
+.trend-svg .line, .trend-svg .key-line { stroke: var(--c); }
+.trend-svg .dot { fill: var(--c); }
+.key { display: inline-block; width: 12px; height: 3px; border-radius: 2px; background: var(--c); margin-right: 8px; vertical-align: middle; }
+.key.none { background: transparent; }
+.chip .key { margin-right: 2px; }
+.trend-lower { display: grid; gap: 20px; margin-top: 18px; }
+.trend-lower > *, .trend-body, .trend-charts > * { min-width: 0; }
+.trends .card-head > div { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 560px) { .trends .filter-btn { width: auto; padding: 8px 14px; } .trend-table table.data th, .trend-table table.data td { padding-left: 8px; padding-right: 8px; } .trend-table table.data th { font-size: 0.6875rem; } }
+.trend-bubbles .bubble-svg { margin: 0 auto; }
+@media (min-width: 1400px) { .trend-lower { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; } }
+.bubble circle { fill: var(--c); stroke: var(--surface); stroke-width: 2; }
+.bubble.plain circle { fill: var(--chart-plain); }
+.bubble .bubble-hit { fill: transparent !important; stroke: none !important; }
+.bubble.pick { cursor: pointer; }
+.bubble.pick:hover circle:not(.bubble-hit) { filter: brightness(1.06); stroke: var(--text-2); }
+.bubble text { pointer-events: none; font-variant-numeric: tabular-nums; }
+.bubble .b-name { font-size: 12px; font-weight: 700; }
+.bubble .b-val { font-size: 12px; }
+.bubble text { fill: #ffffff; }
+.bubble.s4 text, .bubble.plain text { fill: var(--chart-plain-ink); }
+.bubble.s4 text { fill: #0b0b0b; }
+.trend-table table td .key { margin-right: 10px; }
+.trend-table td:first-child { white-space: nowrap; }
+.trend-table tr.picked td { font-weight: 600; }
+.trend-tip { position: absolute; z-index: 20; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 10px 12px; font-size: 0.8125rem; min-width: 160px; }
+.trend-tip .tip-title { color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.trend-tip table { border-collapse: collapse; }
+.trend-tip th { color: var(--muted); font-weight: 600; font-size: 0.75rem; padding: 0 0 4px 12px; text-align: right; }
+.trend-tip td { padding: 2px 0 2px 12px; white-space: nowrap; }
+.trend-tip td:first-child, .trend-tip th:first-child { padding-left: 0; text-align: left; color: var(--text-2); }
+.trend-tip td.num strong { font-variant-numeric: tabular-nums; }
+.month-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
