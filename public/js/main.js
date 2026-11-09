@@ -46,54 +46,56 @@
       ['enquiries', '#/enquiries', 'Enquiries', 'list'],
       ['new', '#/new', 'New walk-in', 'plus'],
       ['reports', '#/reports', 'Reports', 'chart'],
+      CRM.isFull() ? ['sales-board', '#/sales-board', 'Sales board', 'trophy'] : null,
       CRM.isManager() ? ['team', '#/team', 'Team', 'team'] : null,
       CRM.isFull() ? ['admin', '#/admin', 'Admin', 'cog'] : null,
       ['account', '#/account', 'Account', 'user'],
     ].filter(Boolean);
     const link = ([key, href, label, icon]) => h('a', { href, dataset: { nav: key } }, CRM.icon(icon), label);
-    const work = items.filter(([k]) => ['today', 'enquiries', 'new', 'reports'].includes(k));
+    const work = items.filter(([k]) => ['today', 'enquiries', 'new', 'reports', 'sales-board'].includes(k));
     const manage = items.filter(([k]) => ['team', 'admin'].includes(k));
     document.getElementById('nav').replaceChildren(
       h('div', { class: 'nav-label' }, 'Sales'),
       work.map(link),
       manage.length ? [h('div', { class: 'nav-label' }, 'Manage'), manage.map(link)] : null,
       h('div', { class: 'spacer' }),
+      link(['help', '#/help', 'Help', 'help']),
       link(['account', '#/account', 'Account', 'user']),
       h('a', { href: '#', onclick: (e) => { e.preventDefault(); CRM.logout(); } }, CRM.icon('back'), 'Sign out'),
       h('div', { class: 'me' }, CRM.avatar(me.name), h('div', null, h('b', null, me.name), h('span', null, CRM.ROLE[me.role])))
     );
-    // Phone tab bar: Today, Enquiries, +New, Reports, More (team/admin/account)
-    const more = CRM.isFull() ? '#/admin' : CRM.isManager() ? '#/team' : '#/account';
+    // Phone tab bar: Today, Enquiries, +New, Reports, More (everything else).
     document.getElementById('tabbar').replaceChildren(
       h('a', { href: '#/today', dataset: { nav: 'today' } }, CRM.icon('today'), 'Today'),
       h('a', { href: '#/enquiries', dataset: { nav: 'enquiries' } }, CRM.icon('list'), 'Enquiries'),
       h('a', { href: '#/new', class: 'tab-new', dataset: { nav: 'new' }, 'aria-label': 'New walk-in' }, h('span', { class: 'plus' }, '+'), 'New'),
       h('a', { href: '#/reports', dataset: { nav: 'reports' } }, CRM.icon('chart'), 'Reports'),
-      h('a', { href: more, dataset: { nav: 'more' } }, CRM.icon(CRM.isManager() ? 'more' : 'user'), CRM.isManager() ? 'More' : 'Account')
+      h('a', { href: '#/help', dataset: { nav: 'more' } }, CRM.icon('more'), 'More')
     );
-    if (CRM.isManager()) {
-      // "More" opens a small menu of the remaining pages.
-      const moreLink = document.querySelector('#tabbar [data-nav="more"]');
-      moreLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        CRM.dialog({
-          title: 'More',
-          body: h(
-            'div',
-            { class: 'stack' },
-            h('a', { class: 'btn btn-block', href: '#/team', onclick: () => document.getElementById('dialog').close() }, 'Team'),
-            CRM.isFull() ? h('a', { class: 'btn btn-block', href: '#/admin', onclick: () => document.getElementById('dialog').close() }, 'Admin') : null,
-            h('a', { class: 'btn btn-block', href: '#/account', onclick: () => document.getElementById('dialog').close() }, 'Account'),
-            h('button', { class: 'btn-block', onclick: () => { document.getElementById('dialog').close(); CRM.logout(); } }, 'Sign out')
-          ),
-        });
+    const moreLink = document.querySelector('#tabbar [data-nav="more"]');
+    moreLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const close = () => document.getElementById('dialog').close();
+      const go = (href, label, icon) => h('a', { class: 'btn btn-block more-link', href, onclick: close }, CRM.icon(icon), label);
+      CRM.dialog({
+        title: 'More',
+        body: h(
+          'div',
+          { class: 'stack' },
+          CRM.isFull() ? go('#/sales-board', 'Sales board', 'trophy') : null,
+          CRM.isManager() ? go('#/team', 'Team', 'team') : null,
+          CRM.isFull() ? go('#/admin', 'Admin', 'cog') : null,
+          go('#/help', 'Help', 'help'),
+          go('#/account', 'Account', 'user'),
+          h('button', { class: 'btn-block', onclick: () => { close(); CRM.logout(); } }, 'Sign out')
+        ),
       });
-    }
+    });
   }
 
   CRM.markNav = (path) => {
     const key = path.startsWith('/enquiries') ? 'enquiries' : path.split('/')[1];
-    const moreKeys = ['team', 'admin', 'account'];
+    const moreKeys = ['team', 'admin', 'account', 'help', 'sales-board'];
     document.querySelectorAll('[data-nav]').forEach((a) => {
       const active = a.dataset.nav === key || (a.dataset.nav === 'more' && moreKeys.includes(key));
       a.classList.toggle('active', active);

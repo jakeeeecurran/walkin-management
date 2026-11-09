@@ -2,7 +2,7 @@ const express = require('express');
 const v = require('../lib/validate');
 const scope = require('../lib/scope');
 const { forbidden, badRequest } = require('../lib/http');
-const { summary, trends } = require('../services/reports');
+const { summary, trends, daily, salesBoard } = require('../services/reports');
 const { audit } = require('../lib/audit');
 const { formatPhone } = require('../lib/validate');
 
@@ -39,6 +39,18 @@ module.exports = function reportRoutes({ db }) {
     const months = String(req.query.months || '').split(',').filter(Boolean);
     if (months.length > 24 || months.some((m) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(m))) throw badRequest('Choose up to 24 months, as YYYY-MM');
     res.json(trends(db, req.user, { months, location_id: v.id(req.query.location_id, 'location_id') }));
+  });
+
+  // Today at a glance: sales managers and the general manager.
+  router.get('/daily', (req, res) => {
+    if (!scope.isManager(req.user)) throw forbidden('Only managers can see the daily summary');
+    res.json(daily(db, req.user));
+  });
+
+  // Sales board: general manager (and admins) only.
+  router.get('/sales-board', (req, res) => {
+    if (!scope.hasFullAccess(req.user)) throw forbidden('Only the general manager can see the sales board');
+    res.json(salesBoard(db, req.user, { location_id: v.id(req.query.location_id, 'location_id') }));
   });
 
   // Excel-friendly CSV of enquiries in the user's scope (managers and GM).

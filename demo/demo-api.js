@@ -4,7 +4,7 @@
   const CRM = window.CRM;
   const SEED = window.DEMO_DATA;
   const PASSWORD = 'demo-password-123';
-  const STORE = 'sunco-crm-demo-v3';
+  const STORE = 'sunco-crm-demo-v4';
   const TZ = 'Australia/Brisbane';
 
   // ---------- Dates ----------
@@ -35,6 +35,7 @@
     for (const a of data.activities) {
       a.created_at = d(a.created_at);
       a.local_date = d(a.local_date);
+      a.followup_due = d(a.followup_due);
     }
     data.today = today();
     return data;
@@ -428,6 +429,106 @@
     out.sort((a, b) => b.enquiries - a.enquiries || b.sold - a.sold || String(a.label).localeCompare(String(b.label)));
     return limit ? out.slice(0, limit) : out;
   }
+  const localDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+
+  // Same rules as the server: managers only; by site for the GM, by salesperson otherwise.
+  function daily(user) {
+    if (!isManager(user)) fail(403, 'Only managers can see the daily summary');
+    const t = today();
+    const bySite = full(user) && db.locations.filter((l) => l.active).length > 1;
+    const scoped = db.enquiries.filter((e) => !e.is_invalid && canView(user, e)).map((e) => present(e, user));
+    const rows = new Map();
+    const row = (key, label) => {
+      if (!rows.has(key)) rows.set(key, { key, label, walk_ins: 0, test_drives: 0, sold: 0, lost: 0, followups: 0, overdue: 0 });
+      return rows.get(key);
+    };
+    if (bySite) for (const l of db.locations.filter((x) => x.active)) row(l.id, l.name);
+    else {
+      const mine = full(user) ? null : new Set(db.user_franchises.filter((x) => x.user_id === user.id).map((x) => x.franchise_id));
+      for (const u of db.users.filter((x) => x.active && x.role === 'salesperson' && (!mine || db.user_franchises.some((uf) => uf.user_id === x.id && mine.has(uf.franchise_id))))) row(u.id, u.name);
+    }
+    const keyOf = (e) => (bySite ? [e.location_id, e.location] : [e.salesperson_id, e.salesperson]);
+    let onTime = 0;
+    for (const e of scoped) {
+      if (e.entry_date === t) { const r = row(...keyOf(e)); r.walk_ins++; if (e.test_drive) r.test_drives++; }
+      if (e.outcome === 'sold' && e.sold_date === t) row(...keyOf(e)).sold++;
+      if (e.outcome === 'lost' && e.closed_at && localDay(e.closed_at) === t) row(...keyOf(e)).lost++;
+      if (e.outcome === 'open' && !e.pending_outcome && e.next_followup_at && e.next_followup_at < t) row(...keyOf(e)).overdue++;
+    }
+    const byId2 = new Map(scoped.map((e) => [e.id, e]));
+    for (const a of db.activities.filter((x) => x.followup_due && x.local_date === t && byId2.has(x.enquiry_id))) {
+      const e = byId2.get(a.enquiry_id);
+      const r = bySite ? row(e.location_id, e.location) : row(a.user_id, byId(db.users, a.user_id)?.name);
+      r.followups++;
+      if (a.local_date <= a.followup_due) onTime++;
+    }
+    const list = [...rows.values()].sort((a, b) => b.sold - a.sold || b.walk_ins - a.walk_ins || b.overdue - a.overdue || String(a.label).localeCompare(String(b.label)));
+    const total = (k) => list.reduce((n, r) => n + r[k], 0);
+    return {
+      date: t,
+      group: bySite ? 'site' : 'salesperson',
+      totals: {
+        walk_ins: total('walk_ins'), test_drives: total('test_drives'), sold: total('sold'), lost: total('lost'), followups: total('followups'), followups_on_time: onTime, overdue: total('overdue'),
+        due_today: scoped.filter((e) => e.outcome === 'open' && !e.pending_outcome && e.next_followup_at === t).length,
+        awaiting_approval: scoped.filter((e) => e.pending_outcome).length,
+      },
+      rows: list,
+    };
+  }
+
+  // Same rules as the server: GM/admin only.
+  function salesBoard(user, q) {
+    if (!full(user)) fail(403, 'Only the general manager can see the sales board');
+    const t = today();
+    const month = t.slice(0, 7);
+    const scoped = db.enquiries.filter((e) => !e.is_invalid && canView(user, e)).map((e) => present(e, user)).filter((e) => !q.location_id || e.location_id === Number(q.location_id));
+    const approver = (id) => {
+      const a = db.activities.filter((x) => x.enquiry_id === id && x.type === 'approved').at(-1);
+      return a ? byId(db.users, a.user_id)?.name : null;
+    };
+    const sales = scoped
+      .filter((e) => e.outcome === 'sold' && e.sold_date && e.sold_date.slice(0, 7) === month)
+      .sort((a, b) => String(b.sold_at).localeCompare(String(a.sold_at)) || b.id - a.id)
+      .map((e) => ({ id: e.id, sold_at: e.sold_at, sold_date: e.sold_date, customer_name: e.customer_name, stock_number: e.stock_number, test_drive: e.test_drive, trade_in: e.trade_in, finance: e.finance, salesperson_id: e.salesperson_id, salesperson: e.salesperson, location: e.location, brand: e.brand, vehicle: e.vehicle || 'Model not recorded', approved_by: approver(e.id) }));
+    const people = new Map();
+    const person = (id, name) => {
+      if (!people.has(id)) people.set(id, { id, name, sold_today: 0, sold_month: 0, walk_ins_today: 0, enquiries: 0, test_drives: 0, converted: 0, brands: {} });
+      return people.get(id);
+    };
+    for (const e of scoped.filter((x) => x.entry_month === month)) {
+      const p = person(e.salesperson_id, e.salesperson);
+      p.enquiries++;
+      if (e.entry_date === t) p.walk_ins_today++;
+      if (e.test_drive) p.test_drives++;
+      if (e.outcome === 'sold') p.converted++;
+    }
+    for (const sItem of sales) {
+      const p = person(sItem.salesperson_id, sItem.salesperson);
+      p.sold_month++;
+      if (sItem.sold_date === t) p.sold_today++;
+      p.brands[sItem.brand] = (p.brands[sItem.brand] || 0) + 1;
+    }
+    const all = [...people.values()].map((p) => {
+      const u = byId(db.users, p.id);
+      const out = { ...p, location: u?.home_location_id ? byId(db.locations, u.home_location_id)?.name : null, conversion: pct(p.converted, p.enquiries), top_brand: Object.entries(p.brands).sort((a, b) => b[1] - a[1])[0]?.[0] || null };
+      delete out.brands;
+      return out;
+    });
+    const rank = (key) => (a, b) => b[key] - a[key] || b.converted - a.converted || b.enquiries - a.enquiries || a.name.localeCompare(b.name);
+    const brands = new Map();
+    for (const sItem of sales) brands.set(sItem.brand, (brands.get(sItem.brand) || 0) + 1);
+    const soldToday = sales.filter((x) => x.sold_date === t);
+    return {
+      date: t,
+      month,
+      today: soldToday,
+      totals: { sold_today: soldToday.length, sold_month: sales.length, enquiries_month: all.reduce((n, p) => n + p.enquiries, 0) },
+      leaders_today: all.filter((p) => p.sold_today || p.walk_ins_today).sort(rank('sold_today')),
+      leaders_month: all.filter((p) => p.sold_month || p.enquiries).sort(rank('sold_month')),
+      brands_month: [...brands].map(([brand, sold]) => ({ brand, sold })).sort((a, b) => b.sold - a.sold || a.brand.localeCompare(b.brand)),
+    };
+  }
+
   // Same rules as the server: GM/admin only; one month by day, several months by month.
   function trends(user, q) {
     if (!full(user)) fail(403, 'Only the general manager can see brand trends');
@@ -782,6 +883,8 @@
 
   on('GET', /^\/api\/reports\/summary$/, (q) => summary(meReady(), q));
   on('GET', /^\/api\/reports\/trends$/, (q) => trends(meReady(), q));
+  on('GET', /^\/api\/reports\/daily$/, () => daily(meReady()));
+  on('GET', /^\/api\/reports\/sales-board$/, (q) => salesBoard(meReady(), q));
 
   // Team
   on('GET', /^\/api\/users$/, () => {

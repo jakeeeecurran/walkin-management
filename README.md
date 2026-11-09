@@ -27,6 +27,12 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the plan and the decisions behind it.
     - Up to five brands share one chart in brand colours. With more, or by choice, each brand gets its own small chart on a shared scale.
     - The current month is shown by day. Choosing more months, up to a year, shows one point per month.
     - Bubbles show each brand's share of enquiries.
+- **Today at a glance (managers):** today's walk-ins, test drives, sales, lost, follow-ups done, approvals waiting and overdue, split by salesperson (or by site for the GM).
+- **Sales board (general manager only):**
+  - Every car sold today: the time, salesperson, brand and model, site, customer, stock number and who approved it.
+  - Leaderboards for today and the month, and sales this month by brand.
+  - Refreshes itself every minute.
+- **Help:** how-tos for the person's own role, a summary of what they can access, and who to ask.
 - **Team:**
   - The GM adds and removes sales managers and salespeople, and ticks which brands at which sites each person works on.
   - Managers add salespeople within their own brands/sites.

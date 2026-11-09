@@ -282,4 +282,153 @@ function trends(db, user, opts) {
   return { granularity: daily ? 'day' : 'month', months, buckets, today, total_enquiries: total, brands: all };
 }
 
-module.exports = { summary, periodRange, trends };
+// ---------- Daily summary (managers) ----------
+// Today's numbers for the brands and sites the manager looks after, split by site for the
+// general manager (when there is more than one) or by salesperson for a sales manager.
+function daily(db, user) {
+  const timeZone = getSetting(db, 'timezone', 'Australia/Brisbane');
+  const today = localDate(new Date(), timeZone);
+  const f = filters(db, user, {});
+  const bySite = scope.hasFullAccess(user) && db.prepare('SELECT COUNT(*) AS n FROM locations WHERE active = 1').get().n > 1;
+  const groupCol = bySite ? 'fr.location_id' : 'e.salesperson_id';
+  const groupName = bySite ? '(SELECT name FROM locations WHERE id = fr.location_id)' : '(SELECT name FROM users WHERE id = e.salesperson_id)';
+
+  const rows = new Map();
+  const row = (key, label) => {
+    if (!rows.has(key)) rows.set(key, { key, label, walk_ins: 0, test_drives: 0, sold: 0, lost: 0, followups: 0, overdue: 0 });
+    return rows.get(key);
+  };
+  const base = `FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id WHERE ${f.sql}`;
+  for (const r of db.prepare(`SELECT ${groupCol} AS k, ${groupName} AS label, COUNT(*) AS n, SUM(CASE WHEN e.test_drive = 1 THEN 1 ELSE 0 END) AS td ${base} AND e.entry_date = ? GROUP BY k`).all(...f.params, today)) {
+    Object.assign(row(r.k, r.label), { walk_ins: r.n, test_drives: r.td });
+  }
+  for (const r of db.prepare(`SELECT ${groupCol} AS k, ${groupName} AS label, COUNT(*) AS n ${base} AND e.outcome = 'sold' AND e.sold_date = ? GROUP BY k`).all(...f.params, today)) row(r.k, r.label).sold = r.n;
+  // Lost: closed today (local time) as lost.
+  const since = new Date(Date.now() - 2 * 86400e3).toISOString();
+  for (const r of db.prepare(`SELECT ${groupCol} AS k, ${groupName} AS label, e.closed_at ${base} AND e.outcome = 'lost' AND e.closed_at >= ?`).all(...f.params, since)) {
+    if (localDate(new Date(r.closed_at), timeZone) === today) row(r.k, r.label).lost++;
+  }
+  const fuGroup = bySite ? 'fr.location_id' : 'a.user_id';
+  const fuName = bySite ? '(SELECT name FROM locations WHERE id = fr.location_id)' : '(SELECT name FROM users WHERE id = a.user_id)';
+  let onTime = 0;
+  for (const r of db
+    .prepare(
+      `SELECT ${fuGroup} AS k, ${fuName} AS label, COUNT(*) AS n, SUM(CASE WHEN a.local_date <= a.followup_due THEN 1 ELSE 0 END) AS on_time
+       FROM activities a JOIN enquiries e ON e.id = a.enquiry_id JOIN franchises fr ON fr.id = e.franchise_id
+       WHERE ${f.sql} AND a.followup_due IS NOT NULL AND a.local_date = ? GROUP BY k`
+    )
+    .all(...f.params, today)) {
+    row(r.k, r.label).followups = r.n;
+    onTime += r.on_time || 0;
+  }
+  for (const r of db.prepare(`SELECT ${groupCol} AS k, ${groupName} AS label, COUNT(*) AS n ${base} AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at < ? GROUP BY k`).all(...f.params, today)) {
+    row(r.k, r.label).overdue = r.n;
+  }
+  const counts = db
+    .prepare(
+      `SELECT SUM(CASE WHEN e.pending_outcome IS NOT NULL THEN 1 ELSE 0 END) AS awaiting,
+              SUM(CASE WHEN e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at = ? THEN 1 ELSE 0 END) AS due_today
+       ${base}`
+    )
+    .get(today, ...f.params);
+
+  // Everyone (or every site) shows, so a quiet day stands out.
+  if (bySite) {
+    for (const l of db.prepare('SELECT id, name FROM locations WHERE active = 1').all()) row(l.id, l.name);
+  } else {
+    const ids = scope.franchiseIds(db, user);
+    const team = ids === null
+      ? db.prepare("SELECT id, name FROM users WHERE active = 1 AND role = 'salesperson'").all()
+      : ids.length
+        ? db.prepare(`SELECT DISTINCT u.id, u.name FROM users u JOIN user_franchises uf ON uf.user_id = u.id WHERE u.active = 1 AND u.role = 'salesperson' AND uf.franchise_id IN (${ids.map(() => '?').join(', ')})`).all(...ids)
+        : [];
+    for (const u of team) row(u.id, u.name);
+  }
+  const list = [...rows.values()].sort((a, b) => b.sold - a.sold || b.walk_ins - a.walk_ins || b.overdue - a.overdue || String(a.label).localeCompare(String(b.label)));
+  const total = (k) => list.reduce((n, r) => n + r[k], 0);
+  return {
+    date: today,
+    group: bySite ? 'site' : 'salesperson',
+    totals: {
+      walk_ins: total('walk_ins'),
+      test_drives: total('test_drives'),
+      sold: total('sold'),
+      lost: total('lost'),
+      followups: total('followups'),
+      followups_on_time: onTime,
+      overdue: total('overdue'),
+      due_today: counts.due_today || 0,
+      awaiting_approval: counts.awaiting || 0,
+    },
+    rows: list,
+  };
+}
+
+// ---------- Sales board (general manager) ----------
+// Every car sold today with who sold it, plus leaderboards for today and the month.
+function salesBoard(db, user, opts = {}) {
+  const timeZone = getSetting(db, 'timezone', 'Australia/Brisbane');
+  const today = localDate(new Date(), timeZone);
+  const month = today.slice(0, 7);
+  const f = filters(db, user, { location_id: opts.location_id });
+
+  const sales = db
+    .prepare(
+      `SELECT e.id, e.sold_at, e.sold_date, e.customer_name, e.stock_number, e.test_drive, e.trade_in, e.finance,
+              e.salesperson_id, sp.name AS salesperson, l.name AS location, b.name AS brand,
+              COALESCE(m.name, CASE WHEN e.used_make_id IS NOT NULL THEN um.name || ' ' || COALESCE(ulm.name, uxm.name, e.used_model_other, '') END, 'Model not recorded') AS vehicle,
+              (SELECT u.name FROM activities a JOIN users u ON u.id = a.user_id WHERE a.enquiry_id = e.id AND a.type = 'approved' ORDER BY a.id DESC LIMIT 1) AS approved_by
+       FROM enquiries e
+       JOIN franchises fr ON fr.id = e.franchise_id JOIN locations l ON l.id = fr.location_id JOIN brands b ON b.id = fr.brand_id
+       JOIN users sp ON sp.id = e.salesperson_id
+       LEFT JOIN models m ON m.id = e.model_id LEFT JOIN used_makes um ON um.id = e.used_make_id
+       LEFT JOIN models ulm ON ulm.id = e.used_model_id LEFT JOIN used_models uxm ON uxm.id = e.used_extra_model_id
+       WHERE ${f.sql} AND e.outcome = 'sold' AND substr(e.sold_date, 1, 7) = ?
+       ORDER BY e.sold_at DESC, e.id DESC`
+    )
+    .all(...f.params, month)
+    .map((r) => ({ ...r, vehicle: r.vehicle.trim(), test_drive: r.test_drive === 1, trade_in: r.trade_in === 1, finance: r.finance === 1 }));
+
+  const entered = db
+    .prepare(
+      `SELECT e.salesperson_id AS id, sp.name, COUNT(*) AS enquiries,
+              SUM(CASE WHEN e.entry_date = ? THEN 1 ELSE 0 END) AS walk_ins_today,
+              SUM(CASE WHEN e.test_drive = 1 THEN 1 ELSE 0 END) AS test_drives,
+              SUM(CASE WHEN e.outcome = 'sold' THEN 1 ELSE 0 END) AS converted
+       FROM enquiries e JOIN franchises fr ON fr.id = e.franchise_id JOIN users sp ON sp.id = e.salesperson_id
+       WHERE ${f.sql} AND e.entry_month = ? GROUP BY e.salesperson_id`
+    )
+    .all(today, ...f.params, month);
+
+  // One row per salesperson who sold or took enquiries this month.
+  const people = new Map();
+  const person = (id, name) => {
+    if (!people.has(id)) people.set(id, { id, name, sold_today: 0, sold_month: 0, walk_ins_today: 0, enquiries: 0, test_drives: 0, converted: 0, brands: {} });
+    return people.get(id);
+  };
+  for (const r of entered) Object.assign(person(r.id, r.name), { enquiries: r.enquiries, walk_ins_today: r.walk_ins_today, test_drives: r.test_drives, converted: r.converted });
+  for (const s of sales) {
+    const p = person(s.salesperson_id, s.salesperson);
+    p.sold_month++;
+    if (s.sold_date === today) p.sold_today++;
+    p.brands[s.brand] = (p.brands[s.brand] || 0) + 1;
+  }
+  const site = new Map(db.prepare('SELECT id, home_location_id AS loc, (SELECT name FROM locations WHERE id = home_location_id) AS location FROM users').all().map((u) => [u.id, u.location]));
+  const all = [...people.values()].map((p) => ({ ...p, location: site.get(p.id) || null, conversion: pct(p.converted, p.enquiries), top_brand: Object.entries(p.brands).sort((a, b) => b[1] - a[1])[0]?.[0] || null }));
+  for (const p of all) delete p.brands;
+  const rank = (key) => (a, b) => b[key] - a[key] || b.converted - a.converted || b.enquiries - a.enquiries || a.name.localeCompare(b.name);
+  const brandsMonth = new Map();
+  for (const s of sales) brandsMonth.set(s.brand, (brandsMonth.get(s.brand) || 0) + 1);
+
+  return {
+    date: today,
+    month,
+    today: sales.filter((s) => s.sold_date === today),
+    totals: { sold_today: sales.filter((s) => s.sold_date === today).length, sold_month: sales.length, enquiries_month: all.reduce((n, p) => n + p.enquiries, 0) },
+    leaders_today: all.filter((p) => p.sold_today || p.walk_ins_today).sort(rank('sold_today')),
+    leaders_month: all.filter((p) => p.sold_month || p.enquiries).sort(rank('sold_month')),
+    brands_month: [...brandsMonth].map(([brand, sold]) => ({ brand, sold })).sort((a, b) => b.sold - a.sold || a.brand.localeCompare(b.brand)),
+  };
+}
+
+module.exports = { summary, periodRange, trends, daily, salesBoard };

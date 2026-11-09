@@ -127,6 +127,49 @@ describe('reports', () => {
     assert.equal(elsewhere.total_enquiries, 0);
   });
 
+  test("the daily summary shows managers today's numbers by salesperson; salespeople can't see it", async () => {
+    assert.equal((await sam.get('/api/reports/daily')).status, 403);
+    const before = (await manager.get('/api/reports/daily')).body;
+    assert.equal(before.group, 'salesperson');
+    assert.equal(before.date, today);
+    const e = await enquiry(kim, { test_drive: true });
+    await manager.patch(`/api/enquiries/${e.id}`, { outcome: 'sold' });
+    const after = (await manager.get('/api/reports/daily')).body;
+    assert.equal(after.totals.walk_ins, before.totals.walk_ins + 1);
+    assert.equal(after.totals.test_drives, before.totals.test_drives + 1);
+    assert.equal(after.totals.sold, before.totals.sold + 1);
+    const kimRow = after.rows.find((r) => r.label === 'Kim');
+    assert.ok(kimRow && kimRow.sold >= 1);
+    assert.ok(after.rows.some((r) => r.label === 'Sam'), 'everyone in the team is listed, even on a quiet day');
+    const gmView = (await gm.get('/api/reports/daily')).body;
+    assert.equal(gmView.group, 'site');
+    assert.ok(gmView.rows.some((r) => r.label === 'Hervey Bay'), 'every site is listed');
+  });
+
+  test('the sales board is for the general manager only and lists who sold what today', async () => {
+    assert.equal((await manager.get('/api/reports/sales-board')).status, 403);
+    assert.equal((await sam.get('/api/reports/sales-board')).status, 403);
+    const before = (await gm.get('/api/reports/sales-board')).body;
+    const e = await enquiry(sam, { brand_id: t.ids.brand('Used Cars'), model_id: undefined, used_make: 'Toyota', used_model: 'HiLux', stock_number: 'SB123' });
+    await sam.patch(`/api/enquiries/${e.id}`, { outcome: 'sold' }); // goes to approval
+    let board = (await gm.get('/api/reports/sales-board')).body;
+    assert.equal(board.totals.sold_today, before.totals.sold_today, 'not counted until approved');
+    const ok = await manager.post(`/api/enquiries/${e.id}/approval`, { decision: 'approve', reason: 'Deposit checked' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    board = (await gm.get('/api/reports/sales-board')).body;
+    assert.equal(board.totals.sold_today, before.totals.sold_today + 1);
+    const sale = board.today.find((x) => x.id === e.id);
+    assert.equal(sale.salesperson, 'Sam');
+    assert.equal(sale.brand, 'Used Cars');
+    assert.equal(sale.vehicle, 'Toyota HiLux');
+    assert.equal(sale.stock_number, 'SB123');
+    assert.equal(sale.approved_by, 'Mgr');
+    const leader = board.leaders_today.find((p) => p.name === 'Sam');
+    assert.ok(leader.sold_today >= 1);
+    assert.ok(board.leaders_month.find((p) => p.name === 'Sam').sold_month >= 1);
+    assert.ok(board.brands_month.some((b) => b.brand === 'Used Cars'));
+  });
+
   test('managers can export CSV; salespeople cannot; formulas are neutralised', async () => {
     await enquiry(sam, { customer_name: '=HYPERLINK("x")' });
     assert.equal((await sam.get('/api/reports/export.csv')).status, 403);

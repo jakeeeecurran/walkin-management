@@ -40,10 +40,11 @@
   CRM.route(/^\/today$/, async (main) => {
     const me = CRM.state.me;
     const today = CRM.today();
-    const [due, mine, pending] = await Promise.all([
+    const [due, mine, pending, day] = await Promise.all([
       CRM.get(`/api/enquiries${CRM.qs({ due: 'today', sort: 'followup', limit: 200 })}`),
       CRM.get(`/api/enquiries${CRM.qs({ entry_date: today, limit: 6 })}`),
       CRM.get(`/api/enquiries${CRM.qs({ pending: '1', sort: 'oldest', limit: 6 })}`),
+      CRM.isManager() ? CRM.get('/api/reports/daily').catch(() => null) : null,
     ]);
     const toApprove = pending.items.filter((e) => e.can_approve);
     const overdue = due.items.filter((e) => e.next_followup_at < today);
@@ -73,6 +74,7 @@
           h('a', { class: 'stat', href: '#/enquiries?view=today' }, h('div', { class: 'ico' }, CRM.icon('walk')), h('b', null, mine.total), h('span', null, 'Walk-ins today'))
         )
       ),
+      day ? dailySummary(day) : null,
       toApprove.length ? h('div', { class: 'approvals-card' }, section(CRM.isManager() ? 'Waiting for your approval' : 'Awaiting approval', toApprove, pending.total, 'pending', '', '')) : null,
       h(
         'div',
@@ -83,6 +85,69 @@
       overdue.length ? section(CRM.isManager() ? "Today's walk-ins" : 'My walk-ins today', mine.items, mine.total, 'today', 'No walk-ins yet today', 'Tap New walk-in when a customer comes in.') : null
     );
   });
+
+  // Managers: today's numbers at a glance, split by salesperson (or by site for the GM).
+  function dailySummary(d) {
+    const t = d.totals;
+    const tile = (label, value, opts = {}) =>
+      h(opts.href ? 'a' : 'div', { class: ['glance-tile', opts.tone], href: opts.href || null }, h('b', null, value), h('span', null, label), opts.sub ? h('small', null, opts.sub) : null);
+    const SHOW = 8;
+    let all = false;
+    const tableBox = h('div');
+    const cols = [
+      ['walk_ins', 'Walk-ins'],
+      ['test_drives', 'Test drives'],
+      ['sold', 'Sold'],
+      ['followups', 'Follow-ups'],
+      ['overdue', 'Overdue'],
+    ];
+    const drawTable = () => {
+      const rows = all ? d.rows : d.rows.slice(0, SHOW);
+      tableBox.replaceChildren(
+        h(
+          'div',
+          { class: 'table-wrap' },
+          h(
+            'table',
+            { class: 'data glance-table' },
+            h('thead', null, h('tr', null, h('th', null, d.group === 'site' ? 'Site' : 'Salesperson'), cols.map(([k, l]) => h('th', { class: ['num', k === 'test_drives' && 'hide-sm'] }, l)))),
+            h(
+              'tbody',
+              null,
+              rows.map((r) =>
+                h(
+                  'tr',
+                  { class: !r.walk_ins && !r.followups && !r.sold ? 'quiet' : null },
+                  h('td', null, r.label),
+                  cols.map(([k]) => h('td', { class: ['num', k === 'test_drives' && 'hide-sm', k === 'overdue' && r.overdue ? 'warn' : null, k === 'sold' && r.sold ? 'good' : null] }, r[k] || '–'))
+                )
+              )
+            )
+          )
+        ),
+        d.rows.length > SHOW && !all ? h('button', { type: 'button', class: 'reveal', onclick: () => { all = true; drawTable(); } }, `Show all ${d.rows.length}`) : null
+      );
+    };
+    drawTable();
+    return h(
+      'section',
+      { class: 'card glance' },
+      h('div', { class: 'card-head' }, h('h2', null, 'Today at a glance'), h('a', { class: 'see-all', href: '#/reports?period=day' }, 'Full report', CRM.icon('arrow'))),
+      h(
+        'div',
+        { class: 'glance-tiles' },
+        tile('Walk-ins', t.walk_ins, { href: '#/enquiries?view=today' }),
+        tile('Test drives', t.test_drives),
+        tile('Sold', t.sold, { tone: t.sold ? 'good' : null, href: CRM.isFull() ? '#/sales-board' : null }),
+        tile('Lost', t.lost),
+        tile('Follow-ups done', t.followups, { sub: t.followups ? `${t.followups_on_time} on time` : null }),
+        tile('To approve', t.awaiting_approval, { tone: t.awaiting_approval ? 'warn' : null, href: '#/enquiries?view=pending' }),
+        tile('Overdue', t.overdue, { tone: t.overdue ? 'alert' : null, href: '#/enquiries?view=overdue' })
+      ),
+      d.rows.length ? tableBox : null,
+      d.rows.some((r) => !r.walk_ins && !r.followups && !r.sold) ? h('p', { class: 'muted small' }, 'Faded rows have nothing logged yet today.') : null
+    );
+  }
 
   // ---------- Enquiry list ----------
   const VIEWS = [

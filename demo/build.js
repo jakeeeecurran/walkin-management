@@ -13,7 +13,7 @@ const body = html
   .replace(/<script[\s\S]*?<\/script>/g, '')
   .trim();
 const safe = (js) => js.replace(/<\/(script)/gi, '<\\/$1');
-const scripts = ['public/js/theme-boot.js', 'public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/trends.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/main.js'];
+const scripts = ['public/js/theme-boot.js', 'public/js/core.js', 'demo/demo-api.js', 'public/js/enquiries.js', 'public/js/trends.js', 'public/js/reports.js', 'public/js/admin.js', 'public/js/board.js', 'public/js/help.js', 'public/js/main.js'];
 // Sunco branding (the logo is embedded, as the trial page can't load other files) and a few
 // sold/lost requests waiting for approval, so the approval step can be tried straight away.
 const demo = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
@@ -127,6 +127,47 @@ for (const [user, outcome, reason, note] of requests) {
     const id = ++uid;
     demo.users.push({ id, name, username, email: `${username}@example.com`, role, is_admin: 0, home_location_id: siteId(site), active: username === 'max.turner' ? 0 : 1, must_change_password: 0, last_login_at: ago(seen), created_at: ago(60), updated_at: ago(5), notify_email: 1 });
     for (const f of fr(site, brands)) demo.user_franchises.push({ user_id: id, franchise_id: f });
+  }
+}
+// Sample-data tidy-up: lost enquiries get a close date a few days after they came in (the
+// sample marked them all closed on the day it was made), keeping two lost today; and some
+// follow-ups are logged today, a few of them late.
+{
+  const addDays = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+  const yesterday = addDays(demo.today, -1);
+  let keepToday = 2;
+  for (const e of demo.enquiries.filter((x) => x.outcome === 'lost' && x.closed_at && x.closed_at.slice(0, 10) >= yesterday)) {
+    if (keepToday-- > 0 && e.entry_date < demo.today) continue;
+    const day = addDays(e.entry_date, 3) < demo.today ? addDays(e.entry_date, 3) : yesterday;
+    e.closed_at = `${day}T04:00:00.000Z`;
+  }
+  let actId = Math.max(...demo.activities.map((a) => a.id));
+  const open = demo.enquiries.filter((x) => x.outcome === 'open' && !x.pending_outcome && x.entry_date < demo.today).slice(0, 9);
+  open.forEach((e, i) => {
+    const late = i % 4 === 3;
+    demo.activities.push({ id: ++actId, enquiry_id: e.id, user_id: e.salesperson_id, type: 'call', body: late ? 'Called (no answer)' : 'Called. Still deciding, sent the updated quote.', followup_due: late ? addDays(demo.today, -2) : demo.today, local_date: demo.today, created_at: `${demo.today}T0${i % 6}:15:00.000Z` });
+  });
+}
+// Cars sold today, spread through the day and approved by the Caloundra sales manager, so
+// the Sales board and the daily summary have something to show.
+{
+  const user = (u) => demo.users.find((x) => x.username === u);
+  const approver = user('demo.manager');
+  const plan = [['09:20', 'demo.sales'], ['10:05', 'jordan.lee'], ['11:40', 'demo.priya'], ['13:15', 'ella.brooks'], ['14:30', 'demo.sales'], ['15:50', 'demo.tom']];
+  let actId = Math.max(...demo.activities.map((a) => a.id));
+  const used = new Set();
+  for (const [hhmm, username] of plan) {
+    const u = user(username);
+    const theirs = new Set(demo.user_franchises.filter((x) => x.user_id === u.id).map((x) => x.franchise_id));
+    const e = demo.enquiries
+      .filter((x) => x.outcome === 'open' && !x.pending_outcome && x.entry_date < demo.today && theirs.has(x.franchise_id) && !used.has(x.id))
+      .sort((a, b) => b.entry_date.localeCompare(a.entry_date))[0];
+    if (!e) continue;
+    used.add(e.id);
+    const at = new Date(Date.parse(`${demo.today}T${hhmm}:00+10:00`)).toISOString();
+    Object.assign(e, { salesperson_id: u.id, outcome: 'sold', sold_date: demo.today, sold_at: at, closed_at: at, next_followup_at: null, updated_at: at });
+    demo.activities.push({ id: ++actId, enquiry_id: e.id, user_id: u.id, type: 'approval_requested', body: 'Marked as sold. Waiting for sales manager approval. Note: Deposit paid', followup_due: null, local_date: demo.today, created_at: at });
+    demo.activities.push({ id: ++actId, enquiry_id: e.id, user_id: approver.id, type: 'approved', body: 'Approved: sold. Reason: Deposit receipt checked', followup_due: null, local_date: demo.today, created_at: at });
   }
 }
 const data = JSON.stringify(demo);
