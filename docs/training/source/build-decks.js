@@ -260,7 +260,7 @@ async function salesDeck() {
   s = d.content('Welcome', 'Why we use the CRM');
   await d.cards(s, [
     { icon: Lu.LuTimer, head: 'Log a walk-in in 30 seconds', text: 'Mostly taps. The date, your name and the site fill themselves in.' },
-    { icon: Lu.LuBellRing, head: 'Never miss a follow-up', text: 'Every open enquiry has a next date. Overdue ones go to the top.' },
+    { icon: Lu.LuBellRing, head: 'Never miss a follow-up', text: 'Every open enquiry has a next date. Today shows who to contact.' },
     { icon: Lu.LuCalendarCheck, head: 'No more month-end tabs', text: 'One list. Enquiries stay open until they are sold or lost.' },
     { icon: Lu.LuChartColumn, head: 'Your numbers, any time', text: 'Enquiries, test drives and conversion for the day, month or year.' },
   ]);
@@ -270,11 +270,11 @@ async function salesDeck() {
   await d.leftShot(s, shot('sp-today'), 'Today screen');
   await d.points(s, [
     { head: 'New walk-in', text: 'Tap it when a customer arrives.' },
-    { head: 'Overdue', text: 'Follow-ups you missed. Clear these first.' },
-    { head: 'Due today', text: 'The people to contact today.' },
+    { head: 'To follow up today', text: 'Everyone to contact today, oldest first.' },
+    { head: 'Days late', text: 'An amber badge means it was due earlier.' },
     { head: 'Walk-ins today', text: 'Everyone you have logged today.' },
   ], { numbered: true });
-  s.addNotes('Sign in with your own username and password. Today is home: work top to bottom, overdue first, then due today. Each list shows the first few, with See all for the rest. The moon button at the top switches between light and dark.');
+  s.addNotes('Sign in with your own username and password. Today is home: work down To follow up today; anything due on an earlier day is listed first with a days-late badge. Each list shows the first few, with See all for the rest. The moon button at the top switches between light and dark.');
 
   d.section('Logging a walk-in', 'Logging a walk-in', 'Three steps, about 30 seconds, while the customer is still with you',
     'Open the form from New walk-in on Today, the + in the phone menu, or New walk-in at the top of any page. The form has three numbered steps: vehicle, customer and visit.');
@@ -323,7 +323,7 @@ async function salesDeck() {
   await d.leftShot(s, shot('sp-list-menu'), 'Enquiries list with the Show menu open');
   await d.points(s, [
     { icon: Lu.LuSearch, head: 'Search', text: 'By name, phone, email or stock number.' },
-    { icon: Lu.LuChevronDown, head: 'Show', text: 'Open, Overdue, Due today, Awaiting approval and more.' },
+    { icon: Lu.LuChevronDown, head: 'Show', text: 'Open, Due today, Running late, Awaiting approval and more.' },
     { icon: Lu.LuListFilter, head: 'Filters', text: 'Narrow by brand or change the order.' },
   ]);
   s.addNotes('Open is the default: everything still in progress, soonest follow-up first. You only see your own enquiries; managers see their whole team. On a tablet the enquiry opens beside the list.');
@@ -397,11 +397,11 @@ async function salesDeck() {
   await d.cards(s, [
     { icon: Lu.LuUserCheck, head: 'Log it on the spot', text: 'While the customer is still with you.' },
     { icon: Lu.LuCalendarClock, head: 'Always set a follow-up', text: 'No date means no reminder.' },
-    { icon: Lu.LuSunrise, head: 'Clear overdue first', text: 'Open Today each morning and work down.' },
+    { icon: Lu.LuSunrise, head: 'Follow up every day', text: 'Open Today each morning and work down the list.' },
     { icon: Lu.LuPhoneCall, head: 'Log every call', text: 'Even no answer. It shows the work you put in.' },
     { icon: Lu.LuCircleCheckBig, head: 'Close it off promptly', text: 'Send Sold or Lost the day it happens.' },
   ], { cols: 3, iconFill: C.accent2, iconColor: HEX.ink });
-  s.addNotes('These habits are what make the CRM useful. Your sales manager can see overdue follow-ups and how many walk-ins each person logs, so keeping it current protects you as well as the dealership.');
+  s.addNotes('These habits are what make the CRM useful. Your sales manager can see follow-ups running late and how many walk-ins each person logs, so keeping it current protects you as well as the dealership.');
 
   s = d.content('Habits', 'Help is built in');
   await d.leftShot(s, shot('sp-help'), 'Help page for a salesperson');
@@ -449,7 +449,7 @@ async function managerDeck() {
   s = d.content('Welcome', 'Your four jobs in the CRM');
   await d.cards(s, [
     { icon: Lu.LuBadgeCheck, head: 'Approve sold and lost', text: 'Nothing closes until you approve it. Always give a reason.' },
-    { icon: Lu.LuBellRing, head: 'Keep follow-ups on time', text: 'Check overdue every day and chase the right person.' },
+    { icon: Lu.LuBellRing, head: 'Keep follow-ups on time', text: 'Check what is running late and chase the right person.' },
     { icon: Lu.LuChartColumn, head: 'Coach with the numbers', text: 'Compare walk-ins, test drives and conversion by salesperson.' },
     { icon: Lu.LuUsers, head: 'Look after your team', text: 'Add people, reset passwords and hand over enquiries.' },
   ]);
@@ -458,17 +458,17 @@ async function managerDeck() {
   s = d.content('Welcome', 'Your Today screen');
   await d.leftShot(s, shot('m-today'), 'Manager Today screen');
   await d.points(s, [
+    { head: 'Three numbers', text: 'To follow up, walk-ins today, to approve.' },
     { head: 'Today at a glance', text: 'The day’s numbers for your whole team.' },
     { head: 'Waiting for your approval', text: 'Sold and lost requests from your team.' },
-    { head: 'Overdue', text: 'Every overdue follow-up in your brands.' },
-    { head: 'Due today', text: 'What your team should contact today.' },
+    { head: 'To follow up today', text: 'Further down: who your team should contact.' },
   ], { numbered: true });
   s.addNotes('Managers see the whole team on Today, not just their own enquiries. The morning email lists the same things, including what is waiting for your approval.');
 
   s = d.content('Welcome', 'Today at a glance');
   await d.leftShot(s, shot('m-glance'), 'Today at a glance');
   await d.points(s, [
-    { icon: Lu.LuLayoutGrid, head: 'The day in seven numbers', text: 'Walk-ins, test drives, sold, lost, follow-ups, approvals, overdue.' },
+    { icon: Lu.LuLayoutGrid, head: 'The day at a glance', text: 'Test drives, sold, follow-ups done and running late.' },
     { icon: Lu.LuUsers, head: 'By salesperson', text: 'Everyone is listed, even on a quiet day.' },
     { icon: Lu.LuEyeOff, head: 'Faded row?', text: 'Nothing logged yet today. Have a word.' },
     { icon: Lu.LuMousePointerClick, head: 'Tap a number', text: 'Opens the list behind it.' },
@@ -512,7 +512,7 @@ async function managerDeck() {
   await d.cards(s, [
     { head: 'Read Today at a glance', text: 'Any faded rows? Do the walk-ins match the floor?' },
     { head: 'Clear approvals', text: 'Approve or decline everything waiting, with a reason.' },
-    { head: 'Chase overdue', text: 'Filter by salesperson and ask about anything 3+ days late.' },
+    { head: 'Check running late', text: 'Filter by salesperson and ask about anything 3+ days late.' },
     { head: 'Spot-check notes', text: 'Open two or three enquiries and read the history.' },
   ], { numbered: true });
   s.addNotes('Do this first thing each morning, ideally before the sales meeting. The morning email gives you the same list if you are not at a desk.');
@@ -520,9 +520,9 @@ async function managerDeck() {
   s = d.content('Using it properly', 'Check one salesperson’s work');
   {
     const f = await d.framed(s, shot('m-filters'), { x: M, y: TOP, w: 4.4, h: 3.0 }, 'Filters with a salesperson chosen', { top: true, left: true });
-    await d.framed(s, shot('m-list-salesperson'), { x: M + 4.75, y: TOP, w: W - 2 * M - 4.75, h: BOTTOM - TOP }, 'Overdue enquiries for one salesperson', { top: true });
+    await d.framed(s, shot('m-list-salesperson'), { x: M + 4.75, y: TOP, w: W - 2 * M - 4.75, h: BOTTOM - TOP }, 'Running late enquiries for one salesperson', { top: true });
     await d.points(s, [
-      { head: 'Show Overdue', text: 'Then tap Filters.' },
+      { head: 'Show Running late', text: 'Then tap Filters.' },
       { head: 'Pick the salesperson', text: 'And Show results.' },
     ], { x: M, w: 4.4, top: f.y + f.h + 0.4, bottom: BOTTOM, numbered: true });
   }
@@ -542,23 +542,23 @@ async function managerDeck() {
     const f = await d.framed(s, shot('m-attention'), { x: M, y: TOP, w: 6.6, h: BOTTOM - TOP }, 'Needs attention list', { top: true, left: true });
     const x = f.x + f.w + 0.7;
     await d.points(s, [
-      { icon: Lu.LuTriangleAlert, head: 'Needs attention', text: 'Enquiries 3+ days overdue, at the bottom of Reports.' },
+      { icon: Lu.LuTriangleAlert, head: 'Needs attention', text: 'Follow-ups 3+ days late, at the bottom of Reports.' },
       { icon: Lu.LuUser, head: 'Look for a pattern', text: 'One name keeps appearing? Have a chat.' },
       { icon: Lu.LuArrowLeftRight, head: 'Act on it', text: 'Ask them to follow up today, or reassign.' },
     ], { x, w: W - M - x });
   }
-  s.addNotes('Needs attention lists overdue follow-ups, longest first. Customers who have not been contacted for days are the most likely to buy elsewhere.');
+  s.addNotes('Needs attention lists follow-ups running late, longest first. Sales managers see it; the general manager does not. Customers who have not been contacted for days are the most likely to buy elsewhere.');
 
   s = d.content('Using it properly', 'Signs the CRM is not being used properly');
   await d.cards(s, [
     { icon: Lu.LuFootprints, head: 'Low walk-in count', text: 'Fewer logged than you saw on the floor.' },
-    { icon: Lu.LuAlarmClock, head: 'Overdue piling up', text: 'Follow-ups days late, or pushed back again and again.' },
+    { icon: Lu.LuAlarmClock, head: 'Running late piling up', text: 'Follow-ups days late, or pushed back again and again.' },
     { icon: Lu.LuMessageSquareOff, head: 'Empty history', text: 'No comments, or only "No answer".' },
     { icon: Lu.LuCircleHelp, head: 'Vague lost reasons', text: 'Everything "Other", with no detail.' },
     { icon: Lu.LuReceipt, head: 'Sales missing', text: 'A delivery booked but never sent for approval.' },
     { icon: Lu.LuCopy, head: 'Duplicates', text: 'The same customer entered twice.' },
   ], { cols: 3, iconFill: C.accent6, iconColor: HEX.red });
-  s.addNotes('Any of these is a coaching conversation, not a telling-off. The fix is nearly always the five salesperson habits: log it on the spot, always set a follow-up, clear overdue first, log every call, close it off promptly.');
+  s.addNotes('Any of these is a coaching conversation, not a telling-off. The fix is nearly always the five salesperson habits: log it on the spot, always set a follow-up, follow up every day, log every call, close it off promptly.');
 
   d.section('Your team', 'Managing your team', 'Add people, reset passwords, hand over enquiries',
     'The Team page lists everyone in your brands and sites. Managers can add salespeople and change which brands they work on.');
@@ -601,6 +601,15 @@ async function managerDeck() {
 
   d.section('General manager', 'General manager', 'The sales board, brand trends and Admin',
     'These screens are only for the general manager (and anyone given the admin flag).');
+
+  s = d.content('General manager', 'Your Today screen');
+  await d.leftShot(s, shot('gm-today'), 'General manager Today screen');
+  await d.points(s, [
+    { icon: Lu.LuTrophy, head: 'Results first', text: 'Walk-ins today, sold today and to approve.' },
+    { icon: Lu.LuMapPin, head: 'By site', text: 'Today at a glance, split by site.' },
+    { icon: Lu.LuBellOff, head: 'No follow-up lists', text: 'Those are for salespeople and their managers.' },
+  ]);
+  s.addNotes('The general manager’s Today stays on results: sales, walk-ins and approvals. Follow-ups running late are for sales managers to chase; they also stay out of the general manager’s morning email and Reports.');
 
   s = d.content('General manager', 'Sales board: who is selling today');
   await d.leftShot(s, shot('gm-board'), 'Sales board');
@@ -649,7 +658,7 @@ async function managerDeck() {
     body: 'If it is not in the CRM, it did not happen.',
     steps: [
       { icon: Lu.LuBadgeCheck, text: 'Clear approvals every morning' },
-      { icon: Lu.LuAlarmClock, text: 'Keep overdue close to zero' },
+      { icon: Lu.LuAlarmClock, text: 'Keep follow-ups on time' },
       { icon: Lu.LuChartColumn, text: 'Review Reports in your weekly meeting' },
     ],
     notes: 'Wrap up by agreeing a daily approval time and a weekly review of the Reports page with each salesperson.',

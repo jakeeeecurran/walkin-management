@@ -133,6 +133,7 @@ const OUT = (n) => `s2/${n}.png`;
 
   // ===== General manager (Jake) =====
   ({ ctx, page } = await session(tablet, 'demo.gm'));
+  await page.screenshot({ path: OUT('gm-today') });
   await page.locator('.glance').screenshot({ path: OUT('gm-glance') });
   await go(page, '#/sales-board', '.leaders');
   await page.screenshot({ path: OUT('gm-board') });
