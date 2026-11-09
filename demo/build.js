@@ -100,6 +100,35 @@ for (const [user, outcome, reason, note] of requests) {
     }
   }
 }
+// A realistic team across all four sites (managers, salespeople, one leaver), so the Team
+// page looks like it will with the whole dealership on it.
+{
+  const siteId = (name) => demo.locations.find((l) => l.name === name).id;
+  const fr = (site, brands) =>
+    demo.franchises.filter((f) => f.location_id === siteId(site) && (!brands || brands.includes(demo.brands.find((b) => b.id === f.brand_id).name))).map((f) => f.id);
+  let uid = Math.max(...demo.users.map((u) => u.id));
+  const ago = (days, hour = 8) => (days == null ? null : new Date(Date.parse(demo.today + 'T00:00:00Z') - days * 86400e3 + (hour - 10) * 3600e3).toISOString());
+  const staff = [
+    ['Mia Collins', 'mia.collins', 'sales_manager', 'Maroochydore', null, 0],
+    ['Ryan Fletcher', 'ryan.fletcher', 'sales_manager', 'Hervey Bay', null, 1],
+    ['Jordan Lee', 'jordan.lee', 'salesperson', 'Caloundra', ['MG', 'LDV', 'Used Cars'], 0],
+    ['Ella Brooks', 'ella.brooks', 'salesperson', 'Caloundra', ['Chery', 'GAC', 'Leapmotor', 'JMC'], 2],
+    ['Noah Patel', 'noah.patel', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'Used Cars'], 0],
+    ['Grace Kim', 'grace.kim', 'salesperson', 'Maroochydore', ['Audi', 'Volvo'], 1],
+    ['Lachlan Ross', 'lachlan.ross', 'salesperson', 'Maroochydore', ['MG', 'LDV', 'GMSV', 'GAC'], 3],
+    ['Chloe Martin', 'chloe.martin', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'MG'], null],
+    ['Ben Walsh', 'ben.walsh', 'salesperson', 'Kingaroy', ['Ford', 'Mitsubishi', 'Used Cars'], 0],
+    ['Hannah Doyle', 'hannah.doyle', 'salesperson', 'Kingaroy', ['Hyundai', 'Nissan', 'Geely', 'GWM'], 1],
+    ['Cooper Hayes', 'cooper.hayes', 'salesperson', 'Hervey Bay', ['Kia', 'Honda', 'Isuzu'], 0],
+    ['Ruby Taylor', 'ruby.taylor', 'salesperson', 'Hervey Bay', ['Nissan', 'XPeng', 'GWM', 'Used Cars'], 4],
+    ['Max Turner', 'max.turner', 'salesperson', 'Hervey Bay', ['Kia', 'Nissan'], 12],
+  ];
+  for (const [name, username, role, site, brands, seen] of staff) {
+    const id = ++uid;
+    demo.users.push({ id, name, username, email: `${username}@example.com`, role, is_admin: 0, home_location_id: siteId(site), active: username === 'max.turner' ? 0 : 1, must_change_password: 0, last_login_at: ago(seen), created_at: ago(60), updated_at: ago(5), notify_email: 1 });
+    for (const f of fr(site, brands)) demo.user_franchises.push({ user_id: id, franchise_id: f });
+  }
+}
 const data = JSON.stringify(demo);
 
 const page = `<title>Sunco Motors Enquiry Management CRM</title>

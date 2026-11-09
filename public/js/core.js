@@ -92,6 +92,8 @@
     walk: 'M13 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM9 21l2-6 2 2v4M7 12l3-4 4 1 2 3M11 15l-1-4',
     inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1Z',
     check: 'M20 6 9 17l-5-5',
+    'chevron-right': 'm9 6 6 6-6 6',
+    lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z',
     shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z',
     chevron: 'm6 9 6 6 6-6',
     filter: 'M3 6h18M6 12h12M10 18h4',
@@ -232,7 +234,9 @@
     const close = () => dlg.close();
     const head = h('div', { class: 'dlg-head' }, h('h2', null, title), h('button', { class: 'btn-ghost btn-sm', type: 'button', 'aria-label': 'Close', onclick: close }, '✕'));
     const buttons = actions.map((a) =>
-      h(
+      a.menu
+        ? h('button', { type: 'button', class: a.class || 'btn-ghost', 'aria-haspopup': 'menu', onclick: (e) => CRM.menu(e.currentTarget, a.menu, { align: 'left' }) }, a.label, CRM.icon('chevron'))
+        : h(
         'button',
         {
           type: 'button',
@@ -312,7 +316,8 @@
             )
       )
     );
-    document.body.append(el);
+    // Inside an open dialog the menu must live in the dialog, or it sits behind it.
+    (anchor.closest('dialog[open]') || document.body).append(el);
     const r = anchor.getBoundingClientRect();
     const mw = el.offsetWidth;
     const left = align === 'right' ? r.right - mw : r.left;

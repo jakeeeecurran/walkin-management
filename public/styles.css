@@ -195,7 +195,7 @@ button svg, .btn svg { width: 18px; height: 18px; flex: none; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 
 form.stack, .stack { display: grid; gap: 16px; }
-label.field, .field { display: grid; gap: 6px; }
+label.field, .field { display: grid; gap: 6px; align-content: start; }
 .field > span, .field-label { font-weight: 600; font-size: 0.875rem; color: var(--text-2); }
 .field small, .hint { color: var(--muted); font-size: 0.82rem; font-weight: 400; }
 .req::after { content: " *"; color: var(--danger); }
@@ -402,10 +402,16 @@ table.data td a { font-weight: 650; text-decoration: none; }
 .add-row input { flex: 1; }
 .grid-table td.center, .grid-table th.center { text-align: center; }
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
-.franchise-picker { display: grid; gap: 10px; }
-.franchise-picker .site { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface-2); }
-.franchise-picker .site-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.franchise-picker .brands { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.franchise-picker { display: grid; gap: 8px; }
+.franchise-picker .site { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 4px 8px 4px 4px; background: var(--surface-2); }
+.franchise-picker .site.has { border-color: var(--primary-line); }
+.franchise-picker .site-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.franchise-picker .site-toggle { flex: 1; display: flex; align-items: center; justify-content: flex-start; gap: 10px; border: 0; background: none; min-height: 44px; padding: 0 8px; text-align: left; color: var(--text); }
+.franchise-picker .site-toggle:hover { background: none; }
+.franchise-picker .site-toggle svg { width: 18px; height: 18px; color: var(--muted); transform: rotate(-90deg); transition: transform 0.15s; }
+.franchise-picker .site.open .site-toggle svg { transform: none; }
+.franchise-picker .brands { padding: 4px 8px 12px; }
+.franchise-picker .chip svg { width: 14px; height: 14px; }
 .temp-password { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 1.4rem; text-align: center; letter-spacing: 0.05em; background: var(--surface-2); padding: 14px; border-radius: var(--radius-md); user-select: all; border: 1px dashed var(--border-strong); }
 .logo-preview { max-height: 64px; max-width: 220px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
 .callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--radius-md); background: var(--primary-soft); border: 1px solid var(--primary-line); }
@@ -659,3 +665,25 @@ dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-w
 .bubble.chosen circle { fill: var(--primary); }
 .bubble.chosen text { fill: #ffffff; }
 .key.chosen { background: var(--primary); }
+
+/* ---------- Team ---------- */
+.team-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: -6px 0 6px; min-height: 34px; }
+.team-count { margin: 0; }
+.team-group { margin-bottom: 18px; }
+.team-group .group-title { font-size: 0.95rem; margin: 0 0 8px; color: var(--text-2); }
+button.erow.person { width: 100%; text-align: left; font: inherit; cursor: pointer; min-height: 0; }
+.erow.person .name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.erow.person .right { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.85rem; }
+.erow.person .right svg { width: 18px; height: 18px; }
+.erow.person.static { cursor: default; }
+.erow.person.static:hover { border-color: var(--border); box-shadow: none; }
+.erow.person.inactive { opacity: 0.6; }
+.erow.person .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.erow-main { min-width: 0; }
+.seen.stale { color: var(--warning); }
+.badge-muted { background: var(--surface-3); color: var(--text-2); }
+.badge-muted::before { display: none; }
+dialog .dlg-actions .dlg-more { margin-right: auto; }
+dialog .dlg-actions .dlg-more svg { width: 16px; height: 16px; }
+.only-sm { display: none; }
+@media (max-width: 560px) { .only-sm { display: inline; } }

@@ -12,65 +12,149 @@
     const managers = users.filter((u) => u.role !== 'salesperson');
     const sales = users.filter((u) => u.role === 'salesperson');
 
-    const scopeText = (u) => {
+    // ---------- Compact, searchable list ----------
+    const siteTotals = new Map(ref.locations.map((l) => [l.id, ref.franchises.filter((f) => f.location_id === l.id).length]));
+    const scopeFull = (u) => {
       if (u.full_access) return 'All brands, all sites';
       if (!u.franchises.length) return 'No brands assigned';
       const bySite = new Map();
       for (const f of u.franchises) bySite.set(f.location, [...(bySite.get(f.location) || []), f.brand]);
-      return [...bySite].map(([site, brands]) => `${site}: ${brands.join(', ')}`).join(' · ');
+      return [...bySite].map(([site, brands]) => `${site}: ${brands.join(', ')}`).join('\n');
     };
-
-    const table = (list) =>
+    // One short line: "Caloundra · MG, LDV, Used Cars" / "Caloundra · all 10 brands" / "2 sites · 14 brands".
+    const scopeShort = (u) => {
+      if (u.full_access) return 'All sites';
+      if (!u.franchises.length) return 'No brands yet';
+      const sites = [...new Set(u.franchises.map((f) => f.location_id))];
+      if (sites.length > 1) return `${sites.length} sites · ${u.franchises.length} brands`;
+      const brands = u.franchises.map((f) => f.brand);
+      const site = u.franchises[0].location;
+      if (brands.length === siteTotals.get(sites[0]) && brands.length > 2) return `${site} · all ${brands.length} brands`;
+      return `${site} · ${brands.length > 3 ? `${brands.slice(0, 3).join(', ')} +${brands.length - 3}` : brands.join(', ')}`;
+    };
+    const seen = (u) => {
+      if (!u.last_login_at) return h('span', { class: 'badge badge-muted', title: 'Has not signed in yet' }, h('span', { class: 'hide-sm' }, 'Not signed in yet'), h('span', { class: 'only-sm' }, 'Never'));
+      const local = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Brisbane', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(u.last_login_at));
+      const days = Math.round((Date.parse(CRM.today()) - Date.parse(local)) / 86400e3);
+      const text = days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? `${days} days ago` : CRM.fmtDate(local);
+      return h('span', { class: ['seen', days >= 7 && 'stale'], title: `Last signed in ${CRM.fmtDateTime(u.last_login_at)}` }, text);
+    };
+    const personRow = (u) =>
       h(
-        'div',
-        { class: 'table-wrap' },
+        'li',
+        null,
         h(
-          'table',
-          { class: 'data' },
-          h('thead', null, h('tr', null, ['Name', 'Role', 'Brands & sites', 'Last sign-in', ''].map((x) => h('th', null, x)))),
+          u.can_manage ? 'button' : 'div',
+          { type: u.can_manage ? 'button' : null, class: ['erow', 'person', !u.active && 'inactive', !u.can_manage && 'static'], onclick: u.can_manage ? () => editUser(u) : null, title: scopeFull(u) },
+          CRM.avatar(u.name, u.role === 'salesperson' ? '#475569' : null),
           h(
-            'tbody',
-            null,
-            list.map((u) =>
-              h(
-                'tr',
-                { class: u.can_manage ? 'clickable' : '', onclick: u.can_manage ? () => editUser(u) : null, style: { opacity: u.active ? 1 : 0.55 } },
-                h('td', null, h('b', null, u.name), h('div', { class: 'muted small' }, u.username, u.email ? ` · ${u.email}` : '')),
-                h('td', null, CRM.ROLE[u.role], u.is_admin ? ' · Admin' : '', !u.active ? h('div', null, h('span', { class: 'badge badge-lost' }, 'Disabled')) : null),
-                h('td', { class: 'small' }, scopeText(u)),
-                h('td', { class: 'small' }, u.last_login_at ? CRM.fmtDateTime(u.last_login_at) : 'Never'),
-                h('td', null, u.can_manage ? h('button', { class: 'btn-sm', onclick: (e) => { e.stopPropagation(); editUser(u); } }, 'Edit') : h('span', { class: 'muted small' }, u.id === me.id ? 'You' : ''))
-              )
-            )
-          )
+            'div',
+            { class: 'erow-main' },
+            h('div', { class: 'name' }, u.name, u.is_admin ? h('span', { class: 'badge badge-muted' }, 'Admin') : null, u.id === me.id ? h('span', { class: 'muted small' }, ' (you)') : null),
+            h('div', { class: 'sub' }, [u.role === 'general_manager' ? CRM.ROLE[u.role] : null, scopeShort(u)].filter(Boolean).join(' · '))
+          ),
+          h('div', { class: 'right' }, !u.active ? h('span', { class: 'badge badge-lost' }, 'Disabled') : seen(u), u.can_manage ? CRM.icon('chevron-right') : null)
         )
       );
 
-    main.replaceChildren(
-      h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Team'), h('p', { class: 'muted small' }, CRM.isFull() ? 'Add and remove sales managers and salespeople, and choose which brands at which sites they work on.' : 'Add and manage salespeople in your brands and sites.')), h('button', { class: 'btn-accent', onclick: () => editUser(null) }, '+ Add person')),
-      managers.length ? h('section', { class: 'card' }, h('h2', null, `Managers (${managers.length})`), table(managers)) : null,
-      h('section', { class: 'card' }, h('h2', null, `Salespeople (${sales.length})`), sales.length ? table(sales) : h('p', { class: 'empty' }, 'No salespeople yet.'))
+    const f = (CRM.teamFilter = CRM.teamFilter || { q: '', site: '', role: '', disabled: false });
+    const search = h('input', { type: 'search', placeholder: 'Search name, email or brand', value: f.q, 'aria-label': 'Search team', oninput: () => { f.q = search.value; drawList(); } });
+    const disabledCount = users.filter((u) => !u.active).length;
+    const multiSite = ref.locations.length > 1;
+    const listBox = h('div');
+    const countLine = h('p', { class: 'muted small team-count' });
+    const toolbar = h(
+      'div',
+      { class: 'list-toolbar' },
+      h(
+        'div',
+        { class: 'toolbar' },
+        h('div', { class: 'search' }, CRM.icon('search'), search),
+        multiSite ? CRM.dropdown({ label: 'Site', options: [{ value: '', label: 'All sites' }, ...ref.locations.map((l) => ({ value: String(l.id), label: l.name }))], value: f.site, onChange: (v) => { f.site = v; drawList(); } }) : null,
+        CRM.dropdown({ label: 'Role', options: [{ value: '', label: 'Everyone' }, { value: 'managers', label: 'Managers' }, { value: 'salesperson', label: 'Salespeople' }], value: f.role, onChange: (v) => { f.role = v; drawList(); } })
+      )
     );
+    const disabledToggle = disabledCount
+      ? h('button', { type: 'button', class: 'btn-sm btn-ghost', 'aria-pressed': String(f.disabled), onclick: (e) => { f.disabled = !f.disabled; e.currentTarget.setAttribute('aria-pressed', String(f.disabled)); e.currentTarget.textContent = f.disabled ? `Hide disabled (${disabledCount})` : `Show disabled (${disabledCount})`; drawList(); } }, f.disabled ? `Hide disabled (${disabledCount})` : `Show disabled (${disabledCount})`)
+      : null;
 
+    const PAGE = 25;
+    const expanded = new Set();
+    function drawList() {
+      const q = f.q.trim().toLowerCase();
+      const match = (u) =>
+        (f.disabled || u.active) &&
+        (!f.site || u.home_location_id === Number(f.site) || u.franchises.some((x) => x.location_id === Number(f.site)) || (u.full_access && !u.franchises.length)) &&
+        (!f.role || (f.role === 'managers' ? u.role !== 'salesperson' : u.role === f.role)) &&
+        (!q || [u.name, u.username, u.email, ...u.franchises.map((x) => x.brand)].some((x) => x && x.toLowerCase().includes(q)));
+      const order = (a, b) => b.active - a.active || a.name.localeCompare(b.name);
+      const groups = [
+        ['managers', 'Managers', managers.filter(match).sort(order)],
+        ['sales', 'Salespeople', sales.filter(match).sort(order)],
+      ].filter(([, , list]) => list.length);
+      const total = groups.reduce((n, [, , l]) => n + l.length, 0);
+      countLine.textContent = `${total} ${total === 1 ? 'person' : 'people'}${f.q || f.site || f.role ? ' match' : ''}${!f.disabled && disabledCount ? ` · ${disabledCount} disabled hidden` : ''}`;
+      if (!total) return listBox.replaceChildren(CRM.empty('Nobody matches', 'Try a different search or filter.', 'team'));
+      listBox.replaceChildren(
+        ...groups.map(([key, title, list]) => {
+          const shown = expanded.has(key) ? list : list.slice(0, PAGE);
+          return h(
+            'section',
+            { class: 'team-group' },
+            h('h2', { class: 'group-title' }, title, h('span', { class: 'count-pill' }, list.length)),
+            h('ul', { class: 'elist' }, shown.map(personRow)),
+            list.length > shown.length ? h('button', { type: 'button', class: 'reveal', onclick: () => { expanded.add(key); drawList(); } }, `Show all ${list.length}`) : null
+          );
+        })
+      );
+    }
+
+    main.replaceChildren(
+      h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Team'), h('p', { class: 'muted small' }, CRM.isFull() ? 'Sales managers and salespeople, and the brands and sites they work on.' : 'Salespeople in your brands and sites.')), h('button', { class: 'btn-accent', onclick: () => editUser(null) }, '+ Add person')),
+      toolbar,
+      h('div', { class: 'team-meta' }, countLine, disabledToggle),
+      listBox
+    );
+    drawList();
+
+    // Brands and sites: one row per site showing how many brands are ticked; open a site to
+    // change it. Sites already in use start open.
     function franchisePicker(selected) {
       const chosen = new Set(selected);
-      const sites = ref.locations.map((l) => ({ l, fs: ref.franchises.filter((f) => f.location_id === l.id && (f.can_create || chosen.has(f.id))) })).filter((x) => x.fs.length);
+      const sites = ref.locations.map((l) => ({ l, fs: ref.franchises.filter((x) => x.location_id === l.id && (x.can_create || chosen.has(x.id))) })).filter((x) => x.fs.length);
+      const open = new Set(sites.filter(({ fs }) => fs.some((x) => chosen.has(x.id))).map(({ l }) => l.id));
+      if (!open.size && sites.length === 1) open.add(sites[0].l.id);
       const wrap = h('div', { class: 'franchise-picker' });
       const draw = () =>
         wrap.replaceChildren(
           ...sites.map(({ l, fs }) => {
-            const all = fs.every((f) => chosen.has(f.id));
+            const n = fs.filter((x) => chosen.has(x.id)).length;
+            const all = n === fs.length;
+            const isOpen = open.has(l.id);
             return h(
               'div',
-              { class: 'site' },
-              h('div', { class: 'site-head' }, h('b', null, l.name), h('button', { type: 'button', class: 'btn-sm btn-ghost', onclick: () => { fs.forEach((f) => (all ? chosen.delete(f.id) : chosen.add(f.id))); draw(); } }, all ? 'Clear site' : 'Whole site')),
+              { class: ['site', isOpen && 'open', n && 'has'] },
               h(
                 'div',
-                { class: 'brands' },
-                fs.map((f) =>
-                  h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: chosen.has(f.id), onchange: (e) => { e.target.checked ? chosen.add(f.id) : chosen.delete(f.id); draw(); } }), CRM.byId(ref.brands, f.brand_id)?.name)
-                )
-              )
+                { class: 'site-head' },
+                h(
+                  'button',
+                  { type: 'button', class: 'site-toggle', 'aria-expanded': String(isOpen), onclick: () => { isOpen ? open.delete(l.id) : open.add(l.id); draw(); } },
+                  CRM.icon('chevron'),
+                  h('b', null, l.name),
+                  h('span', { class: 'muted small' }, n ? (all ? `All ${fs.length} brands` : `${n} of ${fs.length} brands`) : 'None')
+                ),
+                h('button', { type: 'button', class: 'btn-sm btn-ghost', onclick: () => { fs.forEach((x) => (all ? chosen.delete(x.id) : chosen.add(x.id))); if (!all) open.add(l.id); draw(); } }, all ? 'Clear' : 'Whole site')
+              ),
+              isOpen
+                ? h(
+                    'div',
+                    { class: 'chips brands' },
+                    fs.map((x) =>
+                      h('button', { type: 'button', class: 'chip small', 'aria-pressed': String(chosen.has(x.id)), onclick: () => { chosen.has(x.id) ? chosen.delete(x.id) : chosen.add(x.id); draw(); } }, chosen.has(x.id) ? CRM.icon('check') : null, CRM.byId(ref.brands, x.brand_id)?.name)
+                    )
+                  )
+                : null
             );
           })
         );
@@ -103,23 +187,35 @@
         pickerField
       );
 
-      const actions = [{ label: 'Cancel' }];
+      const actions = [];
       if (!isNew) {
-        actions.push(
-          { label: 'Reset password', onClick: async () => { const r = await CRM.post(`/api/users/${u.id}/reset-password`); showTemp(u.name, r.temporary_password); } },
-          { label: 'Move open enquiries', onClick: () => { moveOpen(u); return true; } },
-          {
-            label: u.active ? 'Disable' : 'Enable',
-            class: u.active ? 'btn-danger' : '',
-            onClick: async () => {
-              if (u.active && !(await CRM.confirm(`Disable ${u.name}?`, 'They will be signed out and can no longer sign in. Their enquiries are kept. Use "Move open enquiries" to hand them to someone else.', 'Disable', 'btn-danger'))) return;
-              await CRM.patch(`/api/users/${u.id}`, { active: !u.active });
-              CRM.toast(u.active ? 'Disabled' : 'Enabled');
-              CRM.render();
+        actions.push({
+          label: 'More',
+          class: 'btn-ghost dlg-more',
+          menu: [
+            { label: 'Reset password', hint: 'Gives them a new temporary password', icon: 'lock', onSelect: async () => { try { const r = await CRM.post(`/api/users/${u.id}/reset-password`); showTemp(u.name, r.temporary_password); } catch (err) { CRM.fail(err); } } },
+            { label: 'Move open enquiries', hint: 'Hand their customers to someone else', icon: 'arrow', onSelect: () => moveOpen(u) },
+            'divider',
+            {
+              label: u.active ? 'Disable' : 'Enable',
+              hint: u.active ? 'Stops them signing in; keeps their enquiries' : 'Lets them sign in again',
+              danger: u.active,
+              onSelect: async () => {
+                try {
+                  if (u.active && !(await CRM.confirm(`Disable ${u.name}?`, 'They will be signed out and can no longer sign in. Their enquiries are kept. Use "Move open enquiries" to hand them to someone else.', 'Disable', 'btn-danger'))) return;
+                  await CRM.patch(`/api/users/${u.id}`, { active: !u.active });
+                  CRM.toast(u.active ? 'Disabled' : 'Enabled');
+                  document.getElementById('dialog').close();
+                  CRM.render();
+                } catch (err) {
+                  CRM.fail(err);
+                }
+              },
             },
-          }
-        );
+          ],
+        });
       }
+      actions.push({ label: 'Cancel' });
       actions.push({
         label: isNew ? 'Add person' : 'Save',
         class: 'btn-primary',
