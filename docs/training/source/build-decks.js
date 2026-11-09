@@ -378,7 +378,7 @@ async function salesDeck() {
     ['sp-phone-detail', 'A customer'],
     ['sp-phone-new', 'New walk-in'],
   ]);
-  s.addNotes('Add it to your home screen so it opens like an app: in Safari tap Share then Add to Home Screen; in Chrome open the menu and tap Add to Home screen. The bottom bar has Today, Enquiries, + for a new walk-in, Reports and Account.');
+  s.addNotes('Add it to your home screen so it opens like an app: in Safari tap Share then Add to Home Screen; in Chrome open the menu and tap Add to Home screen. The bottom bar has Today, Enquiries, + for a new walk-in, Reports and More (Help, Account and Sign out).');
 
   pres.addSection({ title: 'Your numbers' });
   s = d.content('Your numbers', 'See your own numbers any time');
@@ -403,6 +403,16 @@ async function salesDeck() {
   ], { cols: 3, iconFill: C.accent2, iconColor: HEX.ink });
   s.addNotes('These habits are what make the CRM useful. Your sales manager can see overdue follow-ups and how many walk-ins each person logs, so keeping it current protects you as well as the dealership.');
 
+  s = d.content('Habits', 'Help is built in');
+  await d.leftShot(s, shot('sp-help'), 'Help page for a salesperson');
+  await d.points(s, [
+    { icon: Lu.LuCircleHelp, head: 'Help in the menu', text: 'On a phone: More, then Help.' },
+    { icon: Lu.LuUserCheck, head: 'Just what applies to you', text: 'Your brands and your how-tos.' },
+    { icon: Lu.LuSearch, head: 'Search it', text: 'Try "used car" or "password".' },
+    { icon: Lu.LuMessageSquare, head: 'Still stuck?', text: 'Ask your sales manager.' },
+  ]);
+  s.addNotes('Help shows the brands and sites you can log, short how-tos for everything in this guide, and who to ask. It only shows what a salesperson can do, so it stays short.');
+
   pres.addSection({ title: 'Wrap-up' });
   await d.titleSlide('Wrap-up', {
     title: [{ text: 'Every walk-in.', options: { breakLine: true } }, { text: 'Every time.' }],
@@ -410,7 +420,7 @@ async function salesDeck() {
     steps: [
       { icon: Lu.LuLogIn, text: 'Sign in with your own login' },
       { icon: Lu.LuSmartphone, text: 'Add it to your phone' },
-      { icon: Lu.LuMail, text: 'Watch for the morning email' },
+      { icon: Lu.LuCircleHelp, text: 'Unsure? Open Help' },
     ],
     notes: 'Close by asking everyone to sign in today, add the CRM to their phone and log their next walk-in in the CRM instead of the spreadsheet. Forgotten passwords are reset by a sales manager.',
   });
@@ -448,12 +458,22 @@ async function managerDeck() {
   s = d.content('Welcome', 'Your Today screen');
   await d.leftShot(s, shot('m-today'), 'Manager Today screen');
   await d.points(s, [
+    { head: 'Today at a glance', text: 'The day’s numbers for your whole team.' },
     { head: 'Waiting for your approval', text: 'Sold and lost requests from your team.' },
     { head: 'Overdue', text: 'Every overdue follow-up in your brands.' },
     { head: 'Due today', text: 'What your team should contact today.' },
-    { head: 'Walk-ins today', text: 'Compare it with who you saw on the floor.' },
   ], { numbered: true });
   s.addNotes('Managers see the whole team on Today, not just their own enquiries. The morning email lists the same things, including what is waiting for your approval.');
+
+  s = d.content('Welcome', 'Today at a glance');
+  await d.leftShot(s, shot('m-glance'), 'Today at a glance');
+  await d.points(s, [
+    { icon: Lu.LuLayoutGrid, head: 'The day in seven numbers', text: 'Walk-ins, test drives, sold, lost, follow-ups, approvals, overdue.' },
+    { icon: Lu.LuUsers, head: 'By salesperson', text: 'Everyone is listed, even on a quiet day.' },
+    { icon: Lu.LuEyeOff, head: 'Faded row?', text: 'Nothing logged yet today. Have a word.' },
+    { icon: Lu.LuMousePointerClick, head: 'Tap a number', text: 'Opens the list behind it.' },
+  ]);
+  s.addNotes('Today at a glance sits at the top of Today for sales managers and the general manager. The general manager sees it split by site. Sold counts approved sales only. Full report opens Reports for today.');
 
   d.section('Approvals', 'Approving sold and lost', 'Nothing closes until you say so',
     'When a salesperson marks an enquiry Sold or Lost it goes to pending. The sales manager for that brand and site approves or declines it, always with a reason.');
@@ -490,9 +510,9 @@ async function managerDeck() {
 
   s = d.content('Using it properly', 'Your 10-minute daily routine');
   await d.cards(s, [
+    { head: 'Read Today at a glance', text: 'Any faded rows? Do the walk-ins match the floor?' },
     { head: 'Clear approvals', text: 'Approve or decline everything waiting, with a reason.' },
-    { head: 'Check overdue', text: 'Filter by salesperson and ask about anything 3+ days late.' },
-    { head: 'Count the walk-ins', text: 'Does Walk-ins today match who came through the door?' },
+    { head: 'Chase overdue', text: 'Filter by salesperson and ask about anything 3+ days late.' },
     { head: 'Spot-check notes', text: 'Open two or three enquiries and read the history.' },
   ], { numbered: true });
   s.addNotes('Do this first thing each morning, ideally before the sales meeting. The morning email gives you the same list if you are not at a desk.');
@@ -546,35 +566,77 @@ async function managerDeck() {
   s = d.content('Your team', 'The Team page');
   await d.leftShot(s, shot('m-team'), 'Team page');
   await d.points(s, [
-    { icon: Lu.LuUserPlus, head: 'Add person', text: 'Top right.' },
-    { icon: Lu.LuPencil, head: 'Edit', text: 'Brands, sites, role and email.' },
-    { icon: Lu.LuKeyRound, head: 'Reset password', text: 'Gives them a new temporary one.' },
-    { icon: Lu.LuClock, head: 'Last sign-in', text: '"Never" means they have not started.' },
+    { icon: Lu.LuSearch, head: 'Search', text: 'Name, email or brand.' },
+    { icon: Lu.LuListFilter, head: 'Filter', text: 'By role, and by site for the GM.' },
+    { icon: Lu.LuClock, head: 'Not signed in yet', text: 'They have not started using it.' },
+    { icon: Lu.LuMousePointerClick, head: 'Tap a person', text: 'To change brands or use More.' },
   ]);
-  s.addNotes('Brands and sites decide what each person can see and log. A salesperson only sees enquiries in their own brands and sites, and only their own.');
+  s.addNotes('One short row per person: their brands and when they last signed in. Disabled people are hidden; tap Show disabled to see them. Brands and sites decide what each person can see and log.');
 
   s = d.content('Your team', 'Add a new salesperson');
   await d.twoUp(s, [
-    { file: 'm-add-person', name: 'Add a person', head: 'Name, username, brands', icon: Lu.LuUserPlus, text: 'Tick the brands they sell at each site, then Add person.' },
+    { file: 'm-add-person', name: 'Add a person', head: 'Name, username, brands', icon: Lu.LuUserPlus, text: 'Open their site and tap the brands they sell, then Add person.' },
     { file: 'm-temp-password', name: 'Temporary password', head: 'Temporary password', icon: Lu.LuKeyRound, text: 'Give it to them in person. They choose their own when they first sign in.' },
   ], { shotH: 3.2 });
   s.addNotes('Add an email address so they get the morning reminder. The temporary password is only shown once; if it is lost, use Reset password.');
 
   s = d.content('Your team', 'When someone leaves or goes on leave');
   await d.twoUp(s, [
-    { file: 'm-move-open', name: 'Move open enquiries', head: 'Move open enquiries', icon: Lu.LuArrowLeftRight, text: 'Team, Edit, Move open enquiries. Then Disable to stop them signing in.' },
-    { file: 'm-reassign', name: 'Reassign one enquiry', head: 'Reassign one enquiry', icon: Lu.LuUserRoundCog, text: 'From the ··· button on the enquiry, for a single customer.' },
+    { file: 'm-edit-more', name: 'The More menu on a person', head: 'Tap the person, then More', icon: Lu.LuEllipsis, text: 'Reset password, Move open enquiries or Disable.' },
+    { file: 'm-move-open', name: 'Move open enquiries', head: 'Move open enquiries', icon: Lu.LuArrowLeftRight, text: 'Choose who takes their customers. Then More, Disable.' },
   ], { shotH: 3.0 });
-  s.addNotes('Disabling someone signs them out straight away. Their enquiries and history are kept and still count in the reports for the period they worked.');
+  s.addNotes('Disabling someone signs them out straight away. Their enquiries and history are kept and still count in the reports for the period they worked. To hand over a single customer, use Reassign on the ··· button of that enquiry.');
 
-  s = d.content('Your team', 'General manager only: brands and models');
+  s = d.content('Your team', 'Help for your role');
+  {
+    const f = await d.framed(s, shot('m-help'), { x: M, y: TOP, w: 6.4, h: BOTTOM - TOP }, 'Help page for a sales manager', { top: true, left: true });
+    const x = f.x + f.w + 0.7;
+    await d.points(s, [
+      { icon: Lu.LuCircleHelp, head: 'Help in the menu', text: 'Every how-to in this guide.' },
+      { icon: Lu.LuUserCheck, head: 'Only your role', text: 'Salespeople see their own version.' },
+      { icon: Lu.LuSearch, head: 'Search it', text: 'Try "approve" or "leaves".' },
+    ], { x, w: W - M - x });
+  }
+  s.addNotes('Point new salespeople to Help: it shows them only what they can do. Managers also see approvals, the team and the daily routine; the general manager also sees Admin, backups and the sales board.');
+
+  d.section('General manager', 'General manager', 'The sales board, brand trends and Admin',
+    'These screens are only for the general manager (and anyone given the admin flag).');
+
+  s = d.content('General manager', 'Sales board: who is selling today');
+  await d.leftShot(s, shot('gm-board'), 'Sales board');
+  await d.points(s, [
+    { icon: Lu.LuTrophy, head: 'Leaderboards', text: 'Cars sold today and this month, by salesperson.' },
+    { icon: Lu.LuGauge, head: 'The day at the top', text: 'Sold today, this month and conversion.' },
+    { icon: Lu.LuRefreshCw, head: 'Live', text: 'Refreshes itself every minute.' },
+    { icon: Lu.LuMapPin, head: 'Any site', text: 'All sites, or pick one.' },
+  ]);
+  s.addNotes('Sales board is in the menu for the general manager only. A sale appears once a manager approves it, at the time the salesperson marked it sold. It is a good screen to leave open on an office display.');
+
+  s = d.content('General manager', 'Every car sold today');
+  await d.leftShot(s, shot('gm-board-sold'), 'Sold today list');
+  await d.points(s, [
+    { icon: Lu.LuClock, head: 'When', text: 'The time it was marked sold.' },
+    { icon: Lu.LuUser, head: 'Who and what', text: 'Salesperson, brand, model and site.' },
+    { icon: Lu.LuBadgeCheck, head: 'Approved by', text: 'The manager who signed it off.' },
+    { icon: Lu.LuMousePointerClick, head: 'Tap a row', text: 'Opens the enquiry.' },
+  ]);
+  s.addNotes('Test drive, trade-in and finance show under the vehicle. Below this list the board also shows cars sold this month by brand.');
+
+  s = d.content('General manager', 'Brand trends in Reports');
+  await d.twoUp(s, [
+    { file: 'gm-trends-crop', name: 'Brand trends, brands together', head: 'Together', icon: Lu.LuChartLine, text: 'Up to five brands on one chart. The current month shows by day; tap Months for up to a year.' },
+    { file: 'gm-trends-perbrand', name: 'Brand trends, one chart per brand', head: 'Per brand', icon: Lu.LuLayoutGrid, text: 'All brands, one chart each, on the same scale: enquiries, test drives and sold.' },
+  ], { shotH: 3.4 });
+  s.addNotes('Brand trends is at the top of Reports for the general manager. Tap brands to compare them, or All brands. The bubbles underneath show each brand’s share of enquiries, and the table lists every value.');
+
+  s = d.content('General manager', 'Admin: brands and models');
   await d.twoUp(s, [
     { file: 'gm-sites-crop', name: 'Sites and brands admin', head: 'Sites & brands', icon: Lu.LuStore, text: 'Admin, Sites & brands. Tick which brands each site sells, or add a new brand.' },
     { file: 'gm-models-crop', name: 'Models admin', head: 'Models', icon: Lu.LuCarFront, text: 'Add a model the day it launches. Retire old ones; past enquiries keep them.' },
   ], { shotH: 3.6 });
   s.addNotes('Admin is only for people with the admin flag, normally the general manager. Salespeople can only pick from this model list, which keeps the reports clean. Use the arrows to put the most popular models at the top.');
 
-  s = d.content('Your team', 'General manager only: backups and email');
+  s = d.content('General manager', 'Admin: backups and email');
   await d.twoUp(s, [
     { file: 'gm-backups-crop', name: 'Backups admin', head: 'Backups', icon: Lu.LuDatabaseBackup, text: 'A backup runs every night. Check the last one is OK, and email a copy off-site.' },
     { file: 'gm-email', name: 'Email reminder settings', head: 'Email reminders', icon: Lu.LuMail, text: 'Turn on the morning reminders and end-of-day summary for the team.' },
