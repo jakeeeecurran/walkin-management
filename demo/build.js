@@ -100,6 +100,12 @@ for (const [user, outcome, reason, note] of requests) {
     }
   }
 }
+// Placeholder names for the trial people.
+for (const [username, name] of [['demo.gm', 'Jake Curran'], ['demo.manager', 'Brad Rac'], ['demo.sales', 'Noah Belk'], ['demo.priya', 'Jason Bull']]) {
+  const u = demo.users.find((x) => x.username === username);
+  if (u) u.name = name;
+}
+
 // A realistic team across all four sites (managers, salespeople, one leaver), so the Team
 // page looks like it will with the whole dealership on it.
 {
@@ -113,7 +119,7 @@ for (const [user, outcome, reason, note] of requests) {
     ['Ryan Fletcher', 'ryan.fletcher', 'sales_manager', 'Hervey Bay', null, 1],
     ['Jordan Lee', 'jordan.lee', 'salesperson', 'Caloundra', ['MG', 'LDV', 'Used Cars'], 0],
     ['Ella Brooks', 'ella.brooks', 'salesperson', 'Caloundra', ['Chery', 'GAC', 'Leapmotor', 'JMC'], 2],
-    ['Noah Patel', 'noah.patel', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'Used Cars'], 0],
+    ['Lucas Patel', 'lucas.patel', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'Used Cars'], 0],
     ['Grace Kim', 'grace.kim', 'salesperson', 'Maroochydore', ['Audi', 'Volvo'], 1],
     ['Lachlan Ross', 'lachlan.ross', 'salesperson', 'Maroochydore', ['MG', 'LDV', 'GMSV', 'GAC'], 3],
     ['Chloe Martin', 'chloe.martin', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'MG'], null],

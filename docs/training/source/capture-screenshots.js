@@ -26,7 +26,7 @@ const OUT = (n) => `s2/${n}.png`;
   const dlg = async (page, name) => { await page.waitForSelector('dialog[open] .dlg'); await page.waitForTimeout(250); await page.locator('dialog .dlg').screenshot({ path: OUT(name) }); };
   const closeDlg = (page) => page.evaluate(() => document.getElementById('dialog').close());
 
-  // ===== Salesperson (Sam) =====
+  // ===== Salesperson (Noah Belk) =====
   let { ctx, page } = await session(tablet, 'demo.sales');
   await page.screenshot({ path: OUT('sp-today') });
   await go(page, '#/enquiries', '.erow');
@@ -77,7 +77,7 @@ const OUT = (n) => `s2/${n}.png`;
   await go(page, '#/new', 'h1:has-text("New walk-in")'); await page.click('.chip:has-text("MG")'); await page.waitForTimeout(300); await page.screenshot({ path: OUT('sp-phone-new') });
   await ctx.close();
 
-  // ===== Sales manager (Casey) =====
+  // ===== Sales manager (Brad Rac) =====
   ({ ctx, page } = await session(tablet, 'demo.manager'));
   await page.screenshot({ path: OUT('m-today') });
   await page.locator('.glance').screenshot({ path: OUT('m-glance') });
@@ -91,7 +91,7 @@ const OUT = (n) => `s2/${n}.png`;
   // Filter to one salesperson's overdue
   await go(page, '#/enquiries?view=overdue', '.erow');
   await page.click('.filter-btn'); await page.waitForSelector('dialog[open]');
-  await page.selectOption('dialog select >> nth=1', { label: 'Priya Nair' }); await dlg(page, 'm-filters');
+  await page.selectOption('dialog select >> nth=1', { label: 'Jason Bull' }); await dlg(page, 'm-filters');
   await page.click('dialog button:has-text("Show results")'); await page.waitForTimeout(500);
   await page.screenshot({ path: OUT('m-list-salesperson') });
   await page.click('.erow >> nth=0'); await page.waitForSelector('.detail-head'); await page.waitForTimeout(400);

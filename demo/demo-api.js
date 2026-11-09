@@ -4,7 +4,7 @@
   const CRM = window.CRM;
   const SEED = window.DEMO_DATA;
   const PASSWORD = 'demo-password-123';
-  const STORE = 'sunco-crm-demo-v4';
+  const STORE = 'sunco-crm-demo-v5';
   const TZ = 'Australia/Brisbane';
 
   // ---------- Dates ----------
@@ -1200,8 +1200,8 @@
       h.textContent = 'Trial version: tap a person to sign in';
       box.append(
         h,
-        btn('demo.sales', 'Sam Seller', 'Salesperson · MG, LDV, Used Cars'),
-        btn('demo.manager', 'Casey Morgan', 'Sales Manager · Caloundra'),
+        btn('demo.sales', 'Noah Belk', 'Salesperson · MG, LDV, Used Cars'),
+        btn('demo.manager', 'Brad Rac', 'Sales Manager · Caloundra'),
         btn('demo.gm', 'Jake Curran', 'General Manager · everything incl. Admin')
       );
       const note = document.createElement('p');
