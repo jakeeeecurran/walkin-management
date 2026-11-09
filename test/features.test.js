@@ -369,8 +369,11 @@ describe('email reminders', () => {
     const on = await gm.post('/api/admin/email/send-now', { kind: 'morning' });
     assert.ok(on.body.sent >= 2, JSON.stringify(on.body));
     const toSam = t.sentMail.find((m) => m.to === 'sam@example.com');
-    assert.match(toSam.subject, /follow-up/);
+    assert.match(toSam.subject, /to follow up today/);
     assert.match(toSam.html, /Due Today/);
+    assert.doesNotMatch(toSam.html, /Overdue/, 'one calm list, no overdue heading');
+    const toMgr = t.sentMail.find((m) => m.to === 'mgr@example.com');
+    assert.doesNotMatch(toMgr.subject, /overdue/i, 'the morning summary leads with results, not overdue counts');
     const again = await gm.post('/api/admin/email/send-now', { kind: 'morning' });
     assert.equal(again.body.sent, 0);
     const eod = await gm.post('/api/admin/email/send-now', { kind: 'eod' });

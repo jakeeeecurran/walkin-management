@@ -13,9 +13,9 @@
     const t = CRM.today();
     if (e.next_followup_at < t) {
       const days = Math.round((Date.parse(t) - Date.parse(e.next_followup_at)) / 86400e3);
-      return h('span', { class: 'badge badge-overdue' }, `Overdue ${days}d`);
+      return h('span', { class: 'badge badge-due', title: `Follow-up was due ${CRM.fmtDate(e.next_followup_at)}` }, `${days} day${days === 1 ? '' : 's'} late`);
     }
-    if (e.next_followup_at === t) return h('span', { class: 'badge badge-due' }, 'Due today');
+    if (e.next_followup_at === t) return h('span', { class: 'badge badge-open' }, 'Today');
     return h('span', { class: 'badge badge-open' }, CRM.relDay(e.next_followup_at));
   }
 
@@ -47,8 +47,8 @@
       CRM.isManager() ? CRM.get('/api/reports/daily').catch(() => null) : null,
     ]);
     const toApprove = pending.items.filter((e) => e.can_approve);
-    const overdue = due.items.filter((e) => e.next_followup_at < today);
-    const dueToday = due.items.filter((e) => e.next_followup_at === today);
+    const followUp = due.items; // due today or earlier, oldest first
+    const gm = CRM.isFull();
     const SHOW = 5;
 
     const section = (title, items, total, view, emptyTitle, emptyText) =>
@@ -59,6 +59,17 @@
         items.length ? h('ul', { class: 'elist' }, items.slice(0, SHOW).map((e) => enquiryRow(e))) : CRM.empty(emptyTitle, emptyText, 'check'),
         total > SHOW ? h('a', { class: 'see-all', href: `#/enquiries?view=${view}` }, `See all ${total}`, CRM.icon('arrow')) : null
       );
+    const stat = (href, icon, value, label, tone) => h('a', { class: ['stat', tone], href }, h('div', { class: 'ico' }, CRM.icon(icon)), h('b', null, value), h('span', null, label));
+    const walkIns = section(CRM.isManager() ? "Today's walk-ins" : 'My walk-ins today', mine.items, mine.total, 'today', 'No walk-ins yet today', 'Tap New walk-in when a customer comes in.');
+
+    // The general manager sees sales and approvals; follow-ups are for salespeople and their managers.
+    const stats = gm
+      ? [stat('#/enquiries?view=today', 'walk', mine.total, 'Walk-ins today'), stat('#/sales-board', 'trophy', day ? day.totals.sold : '–', 'Sold today'), stat('#/enquiries?view=pending', 'check', pending.total, 'To approve')]
+      : [
+          stat('#/enquiries?view=due', 'clock', followUp.length, 'To follow up', followUp.length ? 'warn' : null),
+          stat('#/enquiries?view=today', 'walk', mine.total, 'Walk-ins today'),
+          stat('#/enquiries?view=pending', 'check', pending.total, CRM.isManager() ? 'To approve' : 'Awaiting approval'),
+        ];
 
     main.replaceChildren(
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'eyebrow' }, CRM.fmtDate(today, { weekday: true, year: true })), h('h1', null, `G'day ${me.name.split(' ')[0]}`))),
@@ -66,23 +77,18 @@
         'div',
         { class: 'today-hero' },
         h('a', { class: 'new-cta', href: '#/new' }, h('div', null, h('b', null, 'New walk-in'), h('span', null, 'Log a customer in under 30 seconds')), h('span', { class: 'plus', 'aria-hidden': 'true' }, '+')),
-        h(
-          'div',
-          { class: 'stat-row' },
-          h('a', { class: ['stat', overdue.length && 'alert'], href: '#/enquiries?view=overdue' }, h('div', { class: 'ico' }, CRM.icon('alert')), h('b', null, overdue.length), h('span', null, 'Overdue')),
-          h('a', { class: ['stat', dueToday.length && 'warn'], href: '#/enquiries?view=due' }, h('div', { class: 'ico' }, CRM.icon('clock')), h('b', null, dueToday.length), h('span', null, 'Due today')),
-          h('a', { class: 'stat', href: '#/enquiries?view=today' }, h('div', { class: 'ico' }, CRM.icon('walk')), h('b', null, mine.total), h('span', null, 'Walk-ins today'))
-        )
+        h('div', { class: 'stat-row' }, stats)
       ),
       day ? dailySummary(day) : null,
       toApprove.length ? h('div', { class: 'approvals-card' }, section(CRM.isManager() ? 'Waiting for your approval' : 'Awaiting approval', toApprove, pending.total, 'pending', '', '')) : null,
-      h(
-        'div',
-        { class: 'grid-2' },
-        section(overdue.length ? 'Overdue' : 'Follow up today', overdue.length ? overdue : dueToday, overdue.length || dueToday.length, overdue.length ? 'overdue' : 'due', "You're all caught up", 'Nothing to follow up today.'),
-        overdue.length ? section('Follow up today', dueToday, dueToday.length, 'due', 'Nothing else due today', null) : section(CRM.isManager() ? "Today's walk-ins" : 'My walk-ins today', mine.items, mine.total, 'today', 'No walk-ins yet today', 'Tap New walk-in when a customer comes in.')
-      ),
-      overdue.length ? section(CRM.isManager() ? "Today's walk-ins" : 'My walk-ins today', mine.items, mine.total, 'today', 'No walk-ins yet today', 'Tap New walk-in when a customer comes in.') : null
+      gm
+        ? walkIns
+        : h(
+            'div',
+            { class: 'grid-2' },
+            section('To follow up today', followUp, followUp.length, 'due', "You're all caught up", 'Nothing to follow up today.'),
+            walkIns
+          ),
     );
   });
 
@@ -99,7 +105,7 @@
       ['test_drives', 'Test drives'],
       ['sold', 'Sold'],
       ['followups', 'Follow-ups'],
-      ['overdue', 'Overdue'],
+      ...(CRM.isFull() ? [] : [['overdue', 'Late']]),
     ];
     const drawTable = () => {
       const rows = all ? d.rows : d.rows.slice(0, SHOW);
@@ -119,7 +125,7 @@
                   'tr',
                   { class: !r.walk_ins && !r.followups && !r.sold ? 'quiet' : null },
                   h('td', null, r.label),
-                  cols.map(([k]) => h('td', { class: ['num', k === 'test_drives' && 'hide-sm', k === 'overdue' && r.overdue ? 'warn' : null, k === 'sold' && r.sold ? 'good' : null] }, r[k] || '–'))
+                  cols.map(([k]) => h('td', { class: ['num', k === 'test_drives' && 'hide-sm', k === 'sold' && r.sold ? 'good' : null] }, r[k] || '–'))
                 )
               )
             )
@@ -136,13 +142,11 @@
       h(
         'div',
         { class: 'glance-tiles' },
-        tile('Walk-ins', t.walk_ins, { href: '#/enquiries?view=today' }),
+        // Walk-ins and approvals are already at the top of Today (and Sold too, for the GM).
         tile('Test drives', t.test_drives),
-        tile('Sold', t.sold, { tone: t.sold ? 'good' : null, href: CRM.isFull() ? '#/sales-board' : null }),
-        tile('Lost', t.lost),
+        CRM.isFull() ? null : tile('Sold', t.sold, { tone: t.sold ? 'good' : null }),
         tile('Follow-ups done', t.followups, { sub: t.followups ? `${t.followups_on_time} on time` : null }),
-        tile('To approve', t.awaiting_approval, { tone: t.awaiting_approval ? 'warn' : null, href: '#/enquiries?view=pending' }),
-        tile('Overdue', t.overdue, { tone: t.overdue ? 'alert' : null, href: '#/enquiries?view=overdue' })
+        CRM.isFull() ? null : tile('Running late', t.overdue, { href: '#/enquiries?view=overdue' })
       ),
       d.rows.length ? tableBox : null,
       d.rows.some((r) => !r.walk_ins && !r.followups && !r.sold) ? h('p', { class: 'muted small' }, 'Faded rows have nothing logged yet today.') : null
@@ -152,7 +156,7 @@
   // ---------- Enquiry list ----------
   const VIEWS = [
     { value: 'open', label: 'Open', hint: 'Everything still in progress', params: { outcome: 'open', sort: 'followup' } },
-    { value: 'overdue', label: 'Overdue', hint: 'Follow-up date has passed', params: { overdue: '1', sort: 'followup' } },
+    { value: 'overdue', label: 'Running late', hint: 'Follow-up date has passed', params: { overdue: '1', sort: 'followup' } },
     { value: 'due', label: 'Due today', hint: 'Overdue and due today', params: { due: 'today', sort: 'followup' } },
     { value: 'pending', label: 'Awaiting approval', hint: 'Sold or lost, waiting for a sales manager', params: { pending: '1', sort: 'oldest' } },
     { value: 'today', label: 'Added today', params: () => ({ entry_date: CRM.today() }) },

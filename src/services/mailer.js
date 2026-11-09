@@ -79,17 +79,17 @@ ${rows
         .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.salesperson_id = ? AND e.next_followup_at <= ? ORDER BY e.next_followup_at`)
         .all(...f.params, user.id, today);
       if (!rows.length) return null;
-      const overdue = rows.filter((r) => r.next_followup_at < today);
-      const due = rows.filter((r) => r.next_followup_at === today);
-      const title = `You have ${due.length} follow-up${due.length === 1 ? '' : 's'} today${overdue.length ? `, ${overdue.length} overdue` : ''}`;
-      const html = `${overdue.length ? `<h3 style="color:#b42318;font-size:15px">Overdue</h3>${enquiryTable(cfg, overdue)}` : ''}
-<h3 style="font-size:15px">Due today</h3>${enquiryTable(cfg, due)}`;
+      // One calm list: anything due today or earlier, oldest first.
+      const title = `You have ${rows.length} customer${rows.length === 1 ? '' : 's'} to follow up today`;
+      const html = `<h3 style="font-size:15px">To follow up today</h3>${enquiryTable(cfg, rows)}`;
       const text = rows.map((r) => `${r.next_followup_at}  ${r.customer_name}  ${formatPhone(r.phone) || r.email || ''}  ${r.brand} ${r.vehicle}`).join('\n');
       return { subject: title, html: wrap(cfg, title, html), text: `${title}\n\n${text}` };
     }
-    // Managers and GM: team overdue follow-ups (escalated ones highlighted) and yesterday's walk-ins.
+    // Managers and GM: approvals and yesterday's numbers. Sales managers also get follow-ups
+    // running several days late (not every overdue one); the GM gets no overdue list.
     const s = summary(db, user, { period: 'day', date: addDays(today, -1) });
-    const overdue = db
+    const isGm = scope.hasFullAccess(user);
+    const overdue = isGm ? [] : db
       .prepare(`${FOLLOWUPS} WHERE ${f.sql} AND e.is_invalid = 0 AND e.outcome = 'open' AND e.pending_outcome IS NULL AND e.next_followup_at < ? ORDER BY e.next_followup_at LIMIT 100`)
       .all(...f.params, today);
     const approvals = db
@@ -97,7 +97,7 @@ ${rows
       .all(...f.params);
     const escalationDays = s.followups.escalation_days;
     const escalated = overdue.filter((r) => r.next_followup_at <= addDays(today, -escalationDays));
-    const title = `Morning summary: ${s.totals.enquiries} walk-in${s.totals.enquiries === 1 ? '' : 's'} yesterday, ${overdue.length} overdue follow-up${overdue.length === 1 ? '' : 's'}`;
+    const title = `Morning summary: ${s.totals.enquiries} walk-in${s.totals.enquiries === 1 ? '' : 's'} and ${s.totals.cars_sold} sold yesterday`;
     const brandRows = s.by_location_brand.map((g) => `<tr><td style="padding:4px">${esc(g.label)}</td><td style="padding:4px;text-align:right">${g.enquiries}</td><td style="padding:4px;text-align:right">${g.test_drives}</td><td style="padding:4px;text-align:right">${g.sold}</td></tr>`).join('');
     const approvalHtml = approvals.length
       ? `<h3 style="font-size:15px">Waiting for your approval (${approvals.length})</h3><ul style="font-size:14px;padding-left:18px">${approvals
@@ -106,8 +106,7 @@ ${rows
       : '';
     const html = `${approvalHtml}<h3 style="font-size:15px">Yesterday (${esc(s.period.from)})</h3>
 ${s.totals.enquiries ? `<table style="border-collapse:collapse;font-size:14px"><tr style="color:#5d6677;text-align:left"><th style="padding:4px">Brand</th><th style="padding:4px">Walk-ins</th><th style="padding:4px">Test drives</th><th style="padding:4px">Sold</th></tr>${brandRows}</table>` : '<p>No walk-ins recorded.</p>'}
-${escalated.length ? `<h3 style="color:#b42318;font-size:15px">Overdue by ${escalationDays}+ days (${escalated.length})</h3>${enquiryTable(cfg, escalated)}` : ''}
-<h3 style="font-size:15px">All overdue follow-ups (${overdue.length})</h3>${enquiryTable(cfg, overdue.filter((r) => !escalated.includes(r)))}`;
+${escalated.length ? `<h3 style="font-size:15px">Follow-ups running ${escalationDays}+ days late (${escalated.length})</h3>${enquiryTable(cfg, escalated)}` : ''}`;
     return { subject: title, html: wrap(cfg, title, html), text: title };
   }
 
@@ -117,7 +116,7 @@ ${escalated.length ? `<h3 style="color:#b42318;font-size:15px">Overdue by ${esca
     const t = s.totals;
     const title = `End of day ${today}: ${t.enquiries} walk-in${t.enquiries === 1 ? '' : 's'}, ${t.test_drives} test drive${t.test_drives === 1 ? '' : 's'}, ${s.totals.cars_sold} sold`;
     const rows = s.by_salesperson.map((g) => `<tr><td style="padding:4px">${esc(g.label)}</td><td style="padding:4px;text-align:right">${g.enquiries}</td><td style="padding:4px;text-align:right">${g.test_drives}</td><td style="padding:4px;text-align:right">${g.sold}</td></tr>`).join('');
-    const html = `<p><b>Today:</b> ${t.enquiries} walk-ins · ${t.test_drives} test drives · ${s.totals.cars_sold} cars sold · follow-ups done ${s.followups.done} (${s.followups.on_time} on time) · ${s.followups.overdue} overdue</p>
+    const html = `<p><b>Today:</b> ${t.enquiries} walk-ins · ${t.test_drives} test drives · ${s.totals.cars_sold} cars sold · follow-ups done ${s.followups.done} (${s.followups.on_time} on time)</p>
 ${rows ? `<table style="border-collapse:collapse;font-size:14px"><tr style="color:#5d6677;text-align:left"><th style="padding:4px">Salesperson</th><th style="padding:4px">Walk-ins</th><th style="padding:4px">Test drives</th><th style="padding:4px">Sold</th></tr>${rows}</table>` : ''}
 <p><b>Month to date:</b> ${m.totals.enquiries} enquiries · ${m.totals.sold} sold · conversion ${m.totals.conversion ?? 0}% · ${m.totals.cars_sold} cars sold this month</p>`;
     return { subject: title, html: wrap(cfg, title, html), text: title };

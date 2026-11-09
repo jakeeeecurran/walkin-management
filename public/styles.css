@@ -251,7 +251,7 @@ details summary { cursor: pointer; font-weight: 600; color: var(--primary-text);
 /* Badges */
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 650; white-space: nowrap; line-height: 1.4; }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.badge-open { background: var(--primary-soft); color: var(--primary-text); }
+.badge-open { background: var(--surface-3); color: var(--text-2); }
 .badge-sold { background: var(--good-soft); color: var(--good); }
 .badge-lost { background: var(--surface-3); color: var(--muted); }
 .badge-overdue { background: var(--danger-soft); color: var(--danger); }
@@ -758,3 +758,4 @@ a.glance-tile:hover { border-color: var(--primary-line); }
 .more-link svg { width: 18px; height: 18px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .leader.place-1 .rank { color: var(--accent); } }
 :root[data-theme="dark"] .leader.place-1 .rank { color: var(--accent); }
+.today-note { margin: -4px 0 16px; }

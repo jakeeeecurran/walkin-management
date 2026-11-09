@@ -240,15 +240,16 @@
     }
     out.push(breakdown);
 
-    if (CRM.isManager()) {
+    // Late follow-ups are for sales managers to chase; the general manager's view stays on results.
+    if (CRM.isManager() && !CRM.isFull()) {
       const lists = [
-        { value: 'escalated', label: `Overdue ${r.followups.escalation_days}+ days`, rows: r.escalated },
+        { value: 'escalated', label: `Late ${r.followups.escalation_days}+ days`, rows: r.escalated },
         { value: 'stale', label: `No activity ${r.followups.stale_days}+ days`, rows: r.stale },
       ];
       const box = h('div');
       const drawList = () => {
         const l = lists.find((x) => x.value === state.attention);
-        box.replaceChildren(l.rows.length ? enquiryTable(l.rows, 8) : CRM.empty('Nothing here', 'Everyone is on top of their follow-ups.', 'check'), l.rows.length > 8 ? h('a', { class: 'see-all', href: '#/enquiries?view=overdue' }, 'See all overdue', CRM.icon('arrow')) : null);
+        box.replaceChildren(l.rows.length ? enquiryTable(l.rows, 8) : CRM.empty('Nothing here', 'Everyone is on top of their follow-ups.', 'check'), l.rows.length > 8 ? h('a', { class: 'see-all', href: '#/enquiries?view=overdue' }, 'See all running late', CRM.icon('arrow')) : null);
       };
       drawList();
       out.push(

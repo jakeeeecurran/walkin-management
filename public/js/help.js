@@ -16,7 +16,7 @@
         { t: 'Signing in for the first time', who: ALL, steps: ['Use the username and temporary password your manager gave you.', 'Choose your own password (at least 10 characters). Nobody else can see it.', 'Forgotten it? Ask your sales manager to reset it.'] },
         { t: 'Put it on your phone like an app', who: ALL, steps: ['iPhone: open it in Safari, tap Share, then Add to Home Screen.', 'Android: open it in Chrome, tap the ⋮ menu, then Add to Home screen.'] },
         { t: 'Light or dark screen', who: ALL, steps: ['Tap the moon or sun button at the top, or choose in Account, Appearance.'] },
-        { t: 'Reminder emails', who: ALL, steps: ['Each morning you get an email listing overdue and due follow-ups.', 'Turn it off or change your email address in Account.'] },
+        { t: 'Reminder emails', who: ALL, steps: ['Each morning you get an email listing the customers to follow up that day.', 'Turn it off or change your email address in Account.'] },
       ],
     },
     {
@@ -31,20 +31,20 @@
     {
       title: 'Follow-ups and closing',
       topics: [
-        { t: 'Your Today screen', who: ['sp'], steps: ['Work from the top: Overdue first, then Due today.', 'Walk-ins today shows everyone you have logged today.'] },
+        { t: 'Your Today screen', who: ['sp'], steps: ['To follow up today lists everyone to contact today, oldest first.', 'Walk-ins today shows everyone you have logged today.'] },
         { t: 'Log a follow-up', who: ALL, steps: ['Open the customer and tap Log follow-up.', 'Say what happened (Called, No answer, SMS, Email or Other), pick the next date, add a note and Save.', 'Log it even when there is no answer; it keeps the date current and shows the work you did.'] },
         { t: 'Sold or lost (salespeople)', who: ['sp'], steps: ['Tap Sold or Lost on the customer’s page and add a short note (for Lost, pick the reason).', 'It goes to your sales manager to approve. Until then it shows "Sold · approval".', 'Changed your mind? Tap Withdraw request.', 'If it is declined, the reason shows on the enquiry and it comes back to your Today screen.'] },
         { t: 'Sold or lost (managers)', who: MGR, steps: ['When you mark an enquiry sold or lost yourself it closes straight away.', 'If it was closed by mistake, open the ⋯ menu and choose Re-open.'] },
-        { t: 'Find an enquiry', who: ALL, steps: ['Search by name, phone, email or stock number.', 'Use Show to switch between Open, Overdue, Due today, Awaiting approval, Sold, Lost and more.', 'Filters narrows by brand' + ' (and salesperson for managers).'] },
+        { t: 'Find an enquiry', who: ALL, steps: ['Search by name, phone, email or stock number.', 'Use Show to switch between Open, Due today, Awaiting approval, Sold, Lost and more.', 'Filters narrows by brand' + ' (and salesperson for managers).'] },
       ],
     },
     {
       title: 'Approvals and your team',
       topics: [
         { t: 'Approve or decline a sale or loss', who: MGR, steps: ['Requests show on Today under "Waiting for your approval", in Enquiries under Awaiting approval, and in your morning email.', 'Open it, read the salesperson’s note, then Approve or Decline.', 'Always give a reason. A sale counts from the day it was sent.', 'Declined requests stay open and go back to the salesperson’s Today screen with your reason.'] },
-        { t: 'Today at a glance', who: MGR, steps: ['The summary at the top of Today shows walk-ins, test drives, sales, follow-ups done and overdue for today.', 'The table underneath splits it by salesperson (or by site for the general manager), so a quiet day stands out.'] },
-        { t: 'A 10-minute daily routine', who: MGR, steps: ['Clear every approval, with a reason.', 'Check Overdue and filter by salesperson; ask about anything 3+ days late.', 'Compare Walk-ins today with who came through the door.', 'Open two or three enquiries and read the history.'] },
-        { t: 'Check one salesperson’s work', who: MGR, steps: ['Enquiries, choose a view (e.g. Overdue), tap Filters, pick the salesperson, then Show results.', 'Reports, Breakdown, By salesperson compares everyone’s enquiries, test drives and conversion.'] },
+        { t: 'Today at a glance', who: MGR, steps: ['The summary at the top of Today shows walk-ins, test drives, sales, follow-ups done and approvals for today (sales managers also see follow-ups running late).', 'The table underneath splits it by salesperson (or by site for the general manager), so a quiet day stands out.'] },
+        { t: 'A 10-minute daily routine', who: MGR, steps: ['Clear every approval, with a reason.', 'Check Running late and filter by salesperson; ask about anything 3+ days late.', 'Compare Walk-ins today with who came through the door.', 'Open two or three enquiries and read the history.'] },
+        { t: 'Check one salesperson’s work', who: MGR, steps: ['Enquiries, choose a view (e.g. Running late), tap Filters, pick the salesperson, then Show results.', 'Reports, Breakdown, By salesperson compares everyone’s enquiries, test drives and conversion.'] },
         { t: 'Fix or hand over an enquiry', who: MGR, steps: ['On the enquiry, open the ⋯ menu.', 'Edit details to correct it, Reassign to give it to someone else, or Mark duplicate/invalid to drop it from the numbers. Nothing is ever deleted.'] },
         { t: 'Add a salesperson', who: MGR, steps: ['Team, + Add person. Enter their name, a username and email.', 'Open each site and tap the brands they sell, then Add person.', 'Give them the temporary password in person. It is shown only once.'] },
         { t: 'Reset a password', who: MGR, steps: ['Team, tap the person, More, Reset password. Give them the new temporary password.'] },
