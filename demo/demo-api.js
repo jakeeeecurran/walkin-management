@@ -4,7 +4,7 @@
   const CRM = window.CRM;
   const SEED = window.DEMO_DATA;
   const PASSWORD = 'demo-password-123';
-  const STORE = 'sunco-crm-demo-v5';
+  const STORE = 'sunco-crm-demo-v6';
   const TZ = 'Australia/Brisbane';
 
   // ---------- Dates ----------

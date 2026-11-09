@@ -101,7 +101,7 @@ for (const [user, outcome, reason, note] of requests) {
   }
 }
 // Placeholder names for the trial people.
-for (const [username, name] of [['demo.gm', 'Jake Curran'], ['demo.manager', 'Brad Rac'], ['demo.sales', 'Noah Belk'], ['demo.priya', 'Jason Bull']]) {
+for (const [username, name] of [['demo.gm', 'Jake Curran'], ['demo.manager', 'Brad Rac'], ['demo.sales', 'Noah Belk'], ['demo.priya', 'Jason Bull'], ['demo.tom', 'Nic Waudby']]) {
   const u = demo.users.find((x) => x.username === username);
   if (u) u.name = name;
 }
@@ -117,7 +117,7 @@ for (const [username, name] of [['demo.gm', 'Jake Curran'], ['demo.manager', 'Br
   const staff = [
     ['Mia Collins', 'mia.collins', 'sales_manager', 'Maroochydore', null, 0],
     ['Ryan Fletcher', 'ryan.fletcher', 'sales_manager', 'Hervey Bay', null, 1],
-    ['Jordan Lee', 'jordan.lee', 'salesperson', 'Caloundra', ['MG', 'LDV', 'Used Cars'], 0],
+    ['Stewart Angove', 'stewart.angove', 'salesperson', 'Caloundra', ['MG', 'LDV', 'Used Cars'], 0],
     ['Ella Brooks', 'ella.brooks', 'salesperson', 'Caloundra', ['Chery', 'GAC', 'Leapmotor', 'JMC'], 2],
     ['Lucas Patel', 'lucas.patel', 'salesperson', 'Maroochydore', ['Hyundai', 'Nissan', 'Used Cars'], 0],
     ['Grace Kim', 'grace.kim', 'salesperson', 'Maroochydore', ['Audi', 'Volvo'], 1],
@@ -159,7 +159,7 @@ for (const [username, name] of [['demo.gm', 'Jake Curran'], ['demo.manager', 'Br
 {
   const user = (u) => demo.users.find((x) => x.username === u);
   const approver = user('demo.manager');
-  const plan = [['09:20', 'demo.sales'], ['10:05', 'jordan.lee'], ['11:40', 'demo.priya'], ['13:15', 'ella.brooks'], ['14:30', 'demo.sales'], ['15:50', 'demo.tom']];
+  const plan = [['09:20', 'demo.sales'], ['10:05', 'stewart.angove'], ['11:40', 'demo.priya'], ['13:15', 'ella.brooks'], ['14:30', 'demo.sales'], ['15:50', 'demo.tom']];
   let actId = Math.max(...demo.activities.map((a) => a.id));
   const used = new Set();
   for (const [hhmm, username] of plan) {

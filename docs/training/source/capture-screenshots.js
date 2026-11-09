@@ -118,7 +118,7 @@ const OUT = (n) => `s2/${n}.png`;
   await dlg(page, 'm-add-person');
   await page.click('dialog button:has-text("Add person")'); await page.waitForSelector('.temp-password'); await dlg(page, 'm-temp-password');
   await page.click('dialog button:has-text("Done")'); await page.waitForTimeout(600);
-  await page.click('button.person:has-text("Tom Baker")'); await page.waitForSelector('dialog[open]');
+  await page.click('button.person:has-text("Nic Waudby")'); await page.waitForSelector('dialog[open]');
   await page.click('dialog .dlg-more'); await page.waitForSelector('dialog .menu'); await page.waitForTimeout(250);
   { const d = await page.locator('dialog .dlg').boundingBox(); await page.screenshot({ path: OUT('m-edit-more'), clip: { x: d.x, y: d.y + d.height * 0.45, width: d.width, height: d.height * 0.55 } }); }
   await page.click('dialog .menu-item:has-text("Move open enquiries")'); await dlg(page, 'm-move-open');
